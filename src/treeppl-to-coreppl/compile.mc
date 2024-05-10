@@ -1343,6 +1343,7 @@ let testOptions =  {
     printSamples = true,
     stackSize = 10000,
     cps = "partial",
+    prune = false,
     earlyStop = true,
     mcmcLightweightGlobalProb = 0.1,
     mcmcLightweightReuseLocal = true,
