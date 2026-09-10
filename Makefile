@@ -18,7 +18,7 @@ endif
 export MCORE_LIBS
 
 build/${tppl_name}: build/src/treeppl-ast.mc $(shell find src -path 'src/lib' -prune -o \( -name "*.mc" -o -name "*.syn" \) -print)
-	cp build/src/treeppl-ast.mc src/treeppl-ast.mc; mi compile src/tpplc.mc --output $@; e=$$?; rm src/treeppl-ast.mc; exit $e
+	cp build/src/treeppl-ast.mc src/treeppl-ast.mc; mi compile src/tpplc.mc --output $@; e=$$?; rm src/treeppl-ast.mc; exit $$e
 
 build/src/treeppl-ast.mc: src/treeppl.syn
 	mkdir -p `dirname $@`

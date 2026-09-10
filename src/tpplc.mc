@@ -247,7 +247,17 @@ let mcmcLightweightOptions : OptParser MkInferMethod =
                 ])
               (utuple_
                 [ create_ (var_ "length") (ulam_ "" true_)
-                , assume_ (uniformDiscrete_ (int_ 0) (subi_ (var_ "length") (int_ 1)))
+                -- NOTE: `length` is 0 for a model with no random choices
+                -- (lib/models/lang/hello.tppl and friends), which made this
+                -- `UniformDiscrete 0 (-1)` -- an inverted range. owl's
+                -- uniform_int_rvs validated nothing and returned 0; the
+                -- validating replacement in miking's lib/mi-stats raises.
+                -- Clamping keeps owl's value; with an empty db the chosen
+                -- index invalidates nothing either way. The same guard is in
+                -- coreppl's own default in inference/mcmc-lightweight.mc.
+                , assume_ (uniformDiscrete_ (int_ 0)
+                    (if_ (lti_ (var_ "length") (int_ 1)) (int_ 0)
+                         (subi_ (var_ "length") (int_ 1))))
                 ])
             ]))
         )
