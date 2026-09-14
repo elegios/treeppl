@@ -40,11 +40,10 @@ jobs:
 
       - name: Install opam packages
         run: |
-          # Install dependencies of owl
-          sudo apt-get install -y liblapacke-dev libopenblas-dev
-
-          # Install all opam packages used in make test-all
-          opam install -y dune linenoise pyml toml lwt owl ocamlformat.0.24.1
+          # Install all opam packages used in make test-all.  Miking's
+          # numerics support comes from its in-tree lib/mi-stats, which needs
+          # only a C++ compiler -- already present on the runner image.
+          opam install -y dune linenoise pyml toml lwt ocamlformat.0.24.1
 
       - name: Build and Install Miking
         run: |
