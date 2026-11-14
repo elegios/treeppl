@@ -20,6 +20,7 @@ include "mexpr/duplicate-code-elimination.mc"
 include "mexpr/deadcode.mc"
 include "mexpr/generate-utest.mc"
 include "mexpr/uncurried.mc"
+include "mexpr/ssa-block.mc"
 include "ocaml/mcore.mc"
 include "ocaml/compile.mc"
 include "ocaml/external-includes.mc"
@@ -49,6 +50,7 @@ include "ast-additions.mc"
 lang TreePPLCompile
   = TreePPLAst + MExprPPL + MExprFindSym + RecLetsDeclAst + Externals + MExprSym
   + FloatAst + Resample + GenerateJsonSerializers + MExprEliminateDuplicateCode
+  + SSABlockLang
   + MCoreLoader + JsonSerializationLoader + IncludeLoader
   + ProjMatchAst + TreePPLOperators
   + TyVarOrConAst
@@ -67,8 +69,11 @@ lang TreePPLCompile
     matrixMul: Name,
     matrixAdd: Name,
     matrixMulFloat: Name,
-    pow: Name
+    pow: Name,
+    functionDepth: Int
   }
+
+  type TpplNameScope = Map Name {name : Name, depth : Int, info : Info, ty : Either (Name, Info) Type}
 
   sem isemi_: Expr -> Expr -> Expr
   sem isemi_ l =
@@ -115,33 +120,114 @@ lang TreePPLCompile
     map f c.cons
   | _ -> []
 
-  sem compileTpplFunction: TpplCompileContext -> DeclTppl -> [DeclLetRecord]
-  sem compileTpplFunction (context: TpplCompileContext) =
-  | FunDeclTppl f ->
-    let positional =
-      let g = lam x.
-        { ident = x.name.v
-        , tyAnnot = compileTypeTppl x.ty
-        , tyParam = tyunknown_
-        , info = x.name.i
+  sem tpplBindingHelper : TpplCompileContext -> TpplNameScope -> {i : Info, v : Name} -> Either Info Type -> (TpplNameScope, Name, Expr -> Expr)
+  sem tpplBindingHelper context scope binder = | ty ->
+    let n = binder.v in
+    let entryTy = lam ty. switch ty
+      case Left (tn, info) then tyWithInfo info (ntycon_ tn)
+      case Right ty then ty
+      end in
+    let prev = mapLookup n scope in
+    let sameFunction = optionMapOr false (lam e. eqi e.depth context.functionDepth) prev in
+    match (sameFunction, prev) with (true, Some entry) then
+      let prevTy = entryTy entry.ty in
+      let wrap = switch ty
+        case Left info then lam tm. _tyAnnot info tm prevTy
+        case Right newTy then
+          let info = infoTy newTy in
+          lam tm. _tyAnnot info (_tyAnnot info tm newTy) prevTy
+        end in
+      (scope, entry.name, wrap)
+    else
+      let entry =
+        { name = optionMapOr n (lam x. x.name) prev
+        , depth = context.functionDepth
+        , info = binder.i
+        , ty = eitherEither (lam info. Left (nameSym (concat "TypeOf_" (nameGetStr n)), info)) (lam ty. Right ty) ty
         } in
-      map g f.args in
-    let ret = optionMapOr tyunit_ compileTypeTppl f.returnTy in
-    let body = foldr stmtSeq
-      (StmtSimple ([], None ()))
-      (map (compileStmtTppl context) f.body) in
-    let body = stmtAsCont body (withInfo f.info unit_) in
+      let ty = entryTy entry.ty in
+      let wrap = lam tm. _tyAnnot (infoTy ty) tm ty in
+      (mapInsert n entry scope, entry.name, wrap)
+
+  sem tpplFunctionHelper
+    : TpplCompileContext
+    -> TpplNameScope
+    -> Info
+    -> [{name : {i : Info, v : Name}, ty : TypeTppl}]
+    -> Option TypeTppl
+    -> [StmtTppl]
+    -> (Expr, Type)
+  sem tpplFunctionHelper context scope info params retTy = | body ->
+    let outerScope = scope in
+    let context = {context with functionDepth = addi context.functionDepth 1} in
+    match
+      let g = lam scope. lam x.
+        let n = nameSetNewSym x.name.v in
+        let ty = compileTypeTppl x.ty in
+        let binding =
+          { name = n
+          , depth = context.functionDepth
+          , info = x.name.i
+          , ty = Right ty
+          } in
+        let param =
+          { ident = n
+          , tyAnnot = ty
+          , tyParam = tyunknown_
+          , info = x.name.i
+          } in
+        (mapInsert x.name.v binding scope, param) in
+      mapAccumL g scope params
+    with (scope, positional) in
+    let ret = optionMapOr tyunit_ compileTypeTppl retTy in
+    match mapAccumL (compileStmtTppl context) scope body with (scope, body) in
+    let body = ssaFinalize
+      { ssaFinalizeOptsUntyped () with
+        joinParam = lam args.
+          let n = args.name in
+          if any (lam x. match x with SSAOuter _ then true else false) args.sources then
+            let v = join ["`", nameGetStr n, "`"] in
+            let outer = mapChoose (mapFilter (lam x. nameEq x.name n) outerScope) in
+            let extra = match outer with Some (_, x)
+              then [(x.info, join [v, " is bound outside this function.\nIf you want to conditionally shadow it, add `val ", nameGetStr n, " = ", nameGetStr n, "` to the beginning of this function."])]
+              else [] in
+            let extra = cons (args.info, join ["This section might leave ", v, " unbound:"]) extra in
+            errorExtra args.readInfo
+              (join ["This use of ", v, " might not be bound:"])
+              extra
+          else ()
+      }
+      (ssaSeq (cons
+        (ssaSetPar (mapFromSeq nameCmp (map (lam p. (p.ident, nvar_ p.ident)) positional)))
+        body))
+      unit_ in
+    let body = mapFoldWithKey
+      (lam body. lam. lam x.
+        if eqi x.depth context.functionDepth then
+          match x.ty with Left (n, info)
+          then bind_ (ntype_ n [] (TyShared {info = info})) body
+          else body
+        else body)
+      body
+      scope in
     let function = TmUncurriedLam
       { positional = positional
       , body = body
-      , info = f.info
+      , info = info
       , ty = tyunknown_
       } in
     let fullTy = TyUncurriedArrow
       { positional = map (lam x. x.tyAnnot) positional
       , ret = ret
-      , info = f.info
+      , info = info
       } in
+    (function, fullTy)
+
+  sem compileTpplFunction: TpplCompileContext -> DeclTppl -> [DeclLetRecord]
+  sem compileTpplFunction (context: TpplCompileContext) =
+  | FunDeclTppl f ->
+    match tpplFunctionHelper context (mapEmpty nameCmp) f.info f.args f.returnTy f.body
+      with (function, fullTy) in
     let fullTy = foldr (lam p. lam ty. ntyall_ p.v ty) fullTy f.tyParams in
     [ { ident = f.name.v
       , tyBody = tyunknown_
@@ -270,255 +356,126 @@ lang TreePPLCompile
     Some (loader, fileEnv, inferCode)
   | _ -> None ()
 
-  syn StmtRes =
-  | StmtSimple ([Decl], Option Expr)
-  | StmtCont Expr -> Expr
-  | StmtNoCont Expr
+  sem _tyAnnot : Info -> Expr -> Type -> Expr
+  sem _tyAnnot info tm = | ty ->
+    let n = nameSym "x" in
+    TmDecl
+    { decl = DeclLet {ident = n, tyAnnot = ty, tyBody = ty, body = tm, info = info}
+    , inexpr = TmVar {ident = n, ty = ty, info = info, frozen = false}
+    , ty = ty
+    , info = info
+    }
 
-  sem msemi_ : Option Expr -> Expr -> Expr
-  sem msemi_ l = | r -> optionMapOr r (lam l. isemi_ l r) l
-
-  sem stmtSeq : StmtRes -> StmtRes -> StmtRes
-  sem stmtSeq a = | b -> stmtSeq_ (a, b)
-  sem stmtSeq_ : (StmtRes, StmtRes) -> StmtRes
-  sem stmtSeq_ =
-  | (StmtNoCont e, _) -> StmtNoCont e
-  | (StmtSimple (as, a), StmtNoCont e) ->
-    StmtNoCont (bindall_ as (msemi_ a e))
-  | (StmtCont c, StmtNoCont e) -> StmtNoCont (c e)
-  | (StmtSimple (as, a), StmtSimple ([], None _)) -> StmtSimple (as, a)
-  | (StmtSimple (as, a), StmtSimple (bs, b)) ->
-    StmtSimple (join [as, optionMapOr [] (lam x. [nulet_ (nameSym "") x]) a, bs], b)
-  | (StmtSimple (as, a), StmtCont c) ->
-    StmtCont (lam cont. bindall_ as (msemi_ a (c cont)))
-  | (StmtCont c, StmtSimple (bs, b)) ->
-    StmtCont (lam cont. c (bindall_ bs (msemi_ b cont)))
-  | (StmtCont a, StmtCont b) -> StmtCont (lam cont. a (b cont))
-
-  sem stmtAsCont : StmtRes -> Expr -> Expr
-  sem stmtAsCont =
-  | StmtSimple (xs, x) -> lam cont. bindall_ xs (msemi_ x cont)
-  | StmtCont c -> c
-  | StmtNoCont e -> lam. e
-
-  sem compileIf : TpplCompileContext -> IfStmtTpplRecord -> StmtRes
-  sem compileIf context = | x ->
-    let condition = compileExprTppl context x.condition in
-    let ifTrue =
-      foldr stmtSeq (StmtSimple ([], None ())) (map (compileStmtTppl context) x.ifTrueStmts) in
-    let ifFalse =
-      foldr stmtSeq (StmtSimple ([], None ())) (map (compileStmtTppl context) x.ifFalseStmts) in
-    let mkIf = lam t. lam f. TmMatch
-      { info = x.info
-      , target = compileExprTppl context x.condition
-      , pat = withInfoPat (get_ExprTppl_info x.condition) ptrue_
-      , thn = t
-      , els = f
-      , ty = tyunknown_
-      } in
-    switch (ifTrue, ifFalse)
-    case (StmtSimple (ts, t), StmtSimple (fs, f)) then
-      -- NOTE(vipa, 2026-02-02): We currently don't have a concept of
-      -- returning data from `if`s, thus we ensure each branch
-      -- "returns" unit.
-      let t = msemi_ t unit_ in
-      let f = msemi_ f unit_ in
-      StmtSimple ([], Some (mkIf (bindall_ ts t) (bindall_ fs f)))
-    case (StmtNoCont t, StmtNoCont f) then
-      StmtNoCont (mkIf t f)
-    case (t, StmtNoCont f) then
-      StmtCont (lam cont. mkIf (stmtAsCont t cont) f)
-    case (StmtNoCont t, f) then
-      StmtCont (lam cont. mkIf t (stmtAsCont f cont))
-    case _ then
-      -- NOTE(vipa, 2025-09-17): At least one is cont, neither is
-      -- nocont. In this case we're going to need the continuation
-      -- expression twice (once per branch), so we bind it to a
-      -- function that we call when needed, so we don't duplicate the
-      -- AST.
-      let f = lam cont.
-        let contName = nameSym "ifCont" in
-        let contF = lam_ "" tyunit_ cont in
-        let cont = withInfo x.info (app_ (nvar_ contName) unit_) in
-        TmDecl
-        { decl = DeclLet
-          { ident = contName
-          , body = contF
-          , tyBody = tyunknown_
-          , tyAnnot = tyunknown_
-          , info = x.info
-          }
-        , info = x.info
-        , ty = tyunknown_
-        , inexpr = mkIf (stmtAsCont ifTrue cont) (stmtAsCont ifFalse cont)
-        } in
-      StmtCont f
-    end
-
-  sem compileStmtTppl: TpplCompileContext -> StmtTppl -> StmtRes
-  sem compileStmtTppl (context: TpplCompileContext) =
+  sem compileStmtTppl: TpplCompileContext -> TpplNameScope -> StmtTppl -> (TpplNameScope, SSABlock)
+  sem compileStmtTppl (context: TpplCompileContext) scope =
 
   | ExprStmtTppl x ->
-    StmtSimple ([], Some (compileExprTppl context x.e))
+    (scope, ssaRun (compileExprTppl context scope x.e))
 
   | AssumeStmtTppl a ->
+    let dist = compileExprTppl context scope a.dist in
+    let tyAnnot = optionMapOr tyunknown_ compileTypeTppl a.ty in
+    let bindTy = match a.ty with Some _ then Right tyAnnot else Left a.randomVar.i in
+    match tpplBindingHelper context scope a.randomVar bindTy with (scope, name, wrap) in
     let driftKernel =
       match a.driftKernel with Some dk then
-        let dk = compileExprTppl context dk in
-        Some (withInfo (infoTm dk) (nulam_ a.randomVar.v dk))
+        let dk = compileExprTppl context scope dk in
+        Some (withInfo (infoTm dk) (nulam_ name dk))
       else None () in
     let body = TmAssume
-      { dist = compileExprTppl context a.dist
-      , ty = tyunknown_
-      , info = a.info
+      { dist = dist
+      , ty = tyAnnot
+      , info = a.randomVar.i
       , driftKernel = driftKernel
       } in
-    let tyAnnot = optionMapOr tyunknown_ compileTypeTppl a.ty in
-    StmtSimple ([declWithInfo a.info (nlet_ a.randomVar.v (tyWithInfo a.info tyAnnot) (withInfo a.info body))], None ())
+    (scope, ssaSetI a.info name (wrap body))
 
   | ObserveStmtTppl x ->
     let obs = TmObserve {
       info = x.info,
-      value = compileExprTppl context x.value,
-      dist = compileExprTppl context x.dist,
+      value = compileExprTppl context scope x.value,
+      dist = compileExprTppl context scope x.dist,
       ty = tyunknown_
     } in
-    StmtSimple ([], Some obs)
+    (scope, ssaRun obs)
 
   | ResampleStmtTppl x ->
-    StmtSimple ([], Some (TmResample { info = x.info, ty = tyunknown_ }))
+    (scope, ssaRun (TmResample { info = x.info, ty = tyunknown_ }))
 
   | AssignStmtTppl a ->
-    let d = DeclLet
-      { ident = a.var.v
-      , tyBody = tyunknown_
-      , tyAnnot = optionMapOr tyunknown_ compileTypeTppl a.ty
-      , body =  compileExprTppl context a.val
-      , info = a.info
-      } in
-    StmtSimple ([d], None ())
+    let body = compileExprTppl context scope a.val in
+    let bindTy = match a.ty with Some ty
+      then Right (compileTypeTppl ty)
+      else Left (get_ExprTppl_info a.val) in
+    match tpplBindingHelper context scope a.var bindTy with (scope, name, wrap) in
+    (scope, ssaSetI a.info name (wrap body))
 
   | WeightStmtTppl a ->
-    let cExpr: Expr = (compileExprTppl context a.value) in
+    let cExpr: Expr = compileExprTppl context scope a.value in
     let logExpr: Expr = withInfo a.info (app_ (withInfo a.info (nvar_ context.logName)) cExpr) in
-    let d = DeclLet
-      { ident = nameNoSym "foo"
-      , tyBody = tyunknown_
-      , tyAnnot = tyunknown_
-      , body = TmWeight
-        { weight = logExpr
-        , ty = tyunknown_
-        , info = a.info
-        }
+    let body = TmWeight
+      { weight = logExpr
+      , ty = tyunknown_
       , info = a.info
       } in
-    StmtSimple ([d], None ())
+    (scope, ssaRun body)
 
   | LogWeightStmtTppl a ->
-    let d = DeclLet
-      { ident = nameNoSym "foo"
-      , tyBody = tyunknown_
-      , tyAnnot = tyunknown_
-      , body =  TmWeight
-        { weight = compileExprTppl context a.value
-        , ty = tyunknown_
-        , info = a.info
-        }
+    let body = TmWeight
+      { weight = compileExprTppl context scope a.value
+      , ty = tyunknown_
       , info = a.info
       } in
-    StmtSimple ([d], None ())
+    (scope, ssaRun body)
 
-  | IfStmtTppl a ->
-    compileIf context a
+  | IfStmtTppl x ->
+    let condition = compileExprTppl context scope x.condition in
+    match mapAccumL (compileStmtTppl context) scope x.ifTrueStmts with (scope, ifTrue) in
+    match mapAccumL (compileStmtTppl context) scope x.ifFalseStmts with (scope, ifFalse) in
+    (scope, ssaMatchI x.info condition (withInfoPat (infoTm condition) ptrue_) (ssaSeq ifTrue) (ssaSeq ifFalse))
 
   | ForLoopStmtTppl x ->
-    let var_ = lam n. TmVar {ident = n, ty = tyunknown_, info = x.info, frozen = false} in
-    let lam_ = lam n. lam body. TmLam {ident = n, ty = tyunknown_, info = x.info, body = body, tyAnnot = tyunknown_, tyParam = tyunknown_} in
-    let match_ = lam target. lam pat. lam thn. lam els. TmMatch { target = target, pat = pat, thn = thn, els = els, info = x.info, ty = tyunknown_ } in
-    let app_ = lam l. lam r. TmApp { lhs = l, rhs = r, info = x.info, ty = tyunknown_ } in
-    let consPat_ = lam head. lam rest. PatSeqEdge
-      { prefix = [PatNamed {ident = PName head.v, info = head.i, ty = tyunknown_}]
-      , middle = PName rest
-      , postfix = []
-      , info = x.info
-      , ty = tyunknown_
-      } in
-    let loop_ : Expr -> ((Expr -> Expr) -> Expr) -> Expr = lam arg. lam mkBody.
-      let fName = nameSym "for" in
-      TmDecl
-      { decl = DeclRecLets
-        { bindings =
-          [ { ident = fName
-            , tyAnnot = tyunknown_
-            , tyBody = tyunknown_
-            , body = mkBody (app_ (var_ fName))
-            , info = x.info
-            }
-          ]
-        , info = x.info
-        }
-      , info = x.info
-      , inexpr = app_ (var_ fName) arg
-      , ty = tyunknown_
-      } in
-    let param = nameSym "l" in
-    let rest = nameSym "l" in
-    let body = foldr stmtSeq
-      (StmtSimple ([], None ()))
-      (map (compileStmtTppl context) x.forStmts) in
-    let f = lam cont.
-      loop_ (compileExprTppl context x.range)
-        (lam recur.
-          lam_ param
-            (match_ (var_ param) (consPat_ x.iterator rest)
-              (stmtAsCont body (recur (var_ rest)))
-              cont)) in
-    StmtCont f
+    let range = compileExprTppl context scope x.range in
+    let rangeN = nameSym "seq" in
+    let elemN = nameSym "elem" in
+    match tpplBindingHelper context scope x.iterator (Left x.iterator.i) with (scope, name, wrap) in
+    match mapAccumL (compileStmtTppl context) scope x.forStmts with (scope, forStmts) in
+    let body = ssaChain
+      (ssaSetI x.iterator.i name (wrap (withInfo x.iterator.i (nvar_ elemN))))
+      (ssaSeq forStmts) in
+    ( scope
+    , ssaChain
+      (ssaSet rangeN range)
+      (ssaBlock (lam break. ssaLoopI x.info
+        (ssaMatch (nvar_ rangeN) (pseqedgen_ [npvar_ elemN] rangeN [])
+          body
+          break)))
+    )
 
   | ReturnStmtTppl r ->
-    StmtNoCont (optionMapOr (withInfo r.info unit_) (compileExprTppl context) r.return)
+    (scope, ssaReturn (optionMapOr (withInfo r.info unit_) (compileExprTppl context scope) r.return))
 
   | PrintStmtTppl x ->
     let processTerm : Bool -> ExprTppl -> (Bool, Expr) = lam maybeInsertSpace. lam expr.
       match expr with TpplStringExprTppl x then (false, printError_ (str_ x.val.v)) else
-      let p = dprint_ (compileExprTppl context expr) in
+      let p = dprint_ (compileExprTppl context scope expr) in
       (true, if maybeInsertSpace then isemi_ (printError_ (str_ " ")) p else p) in
     let final = isemi_ (printError_ (str_ "\n")) (flushStderr_ unit_) in
     let print = foldr isemi_ final (mapAccumL processTerm false x.printable).1 in
-    StmtSimple ([], Some print)
+    (scope, ssaRun print)
 
-  sem compileExprTppl: TpplCompileContext -> ExprTppl -> Expr
-
-  sem compileExprTppl (context: TpplCompileContext) =
+  sem compileExprTppl: TpplCompileContext -> TpplNameScope -> ExprTppl -> Expr
+  sem compileExprTppl (context: TpplCompileContext) scope =
 
   | AnonFunExprTppl x ->
-    -- TODO(vipa, 2025-06-05): Ascribe a return type as well
-    let mkArg = lam a.
-      { ident = a.name.v
-      , tyAnnot = compileTypeTppl a.ty
-      , tyParam = tyunknown_
-      , info = a.name.i
-      } in
-    let positional = map mkArg x.args in
-    let body = foldr stmtSeq
-      (StmtSimple ([], None ()))
-      (map (compileStmtTppl context) x.stmts) in
-    let body = stmtAsCont body (withInfo x.info unit_) in
-    let retTy = optionMapOr tyunit_ compileTypeTppl x.retTy in
-    let fun = TmUncurriedLam
-      { positional = positional
-      , body =
-        let x = nameSym "x" in
-        bind_ (nlet_ x retTy body) (nvar_ x)
-      , info = x.info
-      , ty = tyunknown_
-      } in
-    fun
+    match tpplFunctionHelper context scope x.info x.args x.retTy x.stmts
+      with (function, fullTy) in
+    _tyAnnot x.info function fullTy
 
   | ProjectionExprTppl x ->
     TmProjMatch {
       info = x.info,
-      target = compileExprTppl context x.target,
+      target = compileExprTppl context scope x.target,
       field = stringToSid x.field.v,
       ty = tyunknown_
     }
@@ -529,7 +486,7 @@ lang TreePPLCompile
     let compileArg = lam e.
       match e with PartialApplicationExprTppl a
       then Left (nameSym "x", a.info)
-      else Right (compileExprTppl context e) in
+      else Right (compileExprTppl context scope e) in
     let args = map compileArg x.args in
     match eitherLefts args with params & ![]
     then TmUncurriedLam
@@ -537,7 +494,7 @@ lang TreePPLCompile
         (lam p. {ident = p.0, tyAnnot = tyunknown_, tyParam = tyunknown_, info = p.1})
         params
       , body = TmUncurriedApp
-        { f = compileExprTppl context x.f
+        { f = compileExprTppl context scope x.f
         , positional = map (eitherEither (lam p. withInfo p.1 (nvar_ p.0)) (lam x. x)) args
         , info = x.info
         , ty = tyunknown_
@@ -546,7 +503,7 @@ lang TreePPLCompile
       , ty = tyunknown_
       }
     else TmUncurriedApp
-      { f = compileExprTppl context x.f
+      { f = compileExprTppl context scope x.f
       , positional = eitherRights args
       , info = x.info
       , ty = tyunknown_
@@ -555,7 +512,7 @@ lang TreePPLCompile
   | BernoulliExprTppl d ->
     TmDist {
       dist = DBernoulli {
-        p = compileExprTppl context d.prob
+        p = compileExprTppl context scope d.prob
       },
       ty = tyunknown_,
       info = d.info
@@ -564,8 +521,8 @@ lang TreePPLCompile
   | BetaExprTppl d ->
     TmDist {
       dist = DBeta {
-        a = compileExprTppl context d.a,
-        b = compileExprTppl context d.b
+        a = compileExprTppl context scope d.a,
+        b = compileExprTppl context scope d.b
       },
       ty = tyunknown_,
       info = d.info
@@ -574,8 +531,8 @@ lang TreePPLCompile
   | BinomialExprTppl d ->
     TmDist {
       dist = DBinomial {
-        n = compileExprTppl context d.n,
-        p = compileExprTppl context d.prob
+        n = compileExprTppl context scope d.n,
+        p = compileExprTppl context scope d.prob
       },
       ty = tyunknown_,
       info = d.info
@@ -584,7 +541,7 @@ lang TreePPLCompile
   | CategoricalExprTppl d ->
     TmDist {
       dist = DCategorical {
-        p = compileExprTppl context d.probs
+        p = compileExprTppl context scope d.probs
       },
       ty = tyunknown_,
       info = d.info
@@ -593,7 +550,7 @@ lang TreePPLCompile
   | Chi2ExprTppl d ->
     TmDist {
       dist = DChi2 {
-        df = compileExprTppl context d.df
+        df = compileExprTppl context scope d.df
       },
       ty = tyunknown_,
       info = d.info
@@ -602,7 +559,7 @@ lang TreePPLCompile
   | DirichletExprTppl d ->
     TmDist {
       dist = DDirichlet {
-        a = compileExprTppl context d.alphas
+        a = compileExprTppl context scope d.alphas
       },
       ty = tyunknown_,
       info = d.info
@@ -611,7 +568,7 @@ lang TreePPLCompile
   | EmpiricalExprTppl d ->
     TmDist {
       dist = DEmpirical {
-        samples = compileExprTppl context d.samples
+        samples = compileExprTppl context scope d.samples
       },
       ty = tyunknown_,
       info = d.info
@@ -620,7 +577,7 @@ lang TreePPLCompile
   | ExponentialExprTppl d ->
     TmDist {
       dist = DExponential {
-        rate = compileExprTppl context d.rate
+        rate = compileExprTppl context scope d.rate
       },
       ty = tyunknown_,
       info = d.info
@@ -629,8 +586,8 @@ lang TreePPLCompile
   | GammaExprTppl d ->
     TmDist {
       dist = DGamma {
-        k = compileExprTppl context d.shape,
-        theta = compileExprTppl context d.scale
+        k = compileExprTppl context scope d.shape,
+        theta = compileExprTppl context scope d.scale
       },
       ty = tyunknown_,
       info = d.info
@@ -639,8 +596,8 @@ lang TreePPLCompile
   | NormalExprTppl d ->
     TmDist {
       dist = DNormal {
-        mu = compileExprTppl context d.mean,
-        sigma = compileExprTppl context d.dev
+        mu = compileExprTppl context scope d.mean,
+        sigma = compileExprTppl context scope d.dev
       },
       ty = tyunknown_,
       info = d.info
@@ -649,7 +606,7 @@ lang TreePPLCompile
   | GeometricExprTppl d ->
     TmDist {
       dist = DGeometric {
-        p = compileExprTppl context d.prob
+        p = compileExprTppl context scope d.prob
       },
       ty = tyunknown_,
       info = d.info
@@ -658,8 +615,8 @@ lang TreePPLCompile
   | MultinomialExprTppl d ->
     TmDist {
       dist = DMultinomial {
-        n = compileExprTppl context d.n,
-        p = compileExprTppl context d.probs
+        n = compileExprTppl context scope d.n,
+        p = compileExprTppl context scope d.probs
       },
       ty = tyunknown_,
       info = d.info
@@ -668,7 +625,7 @@ lang TreePPLCompile
   | PoissonExprTppl d ->
     TmDist {
       dist = DPoisson {
-        lambda = compileExprTppl context d.rate
+        lambda = compileExprTppl context scope d.rate
       },
       ty = tyunknown_,
       info = d.info
@@ -677,8 +634,8 @@ lang TreePPLCompile
   | UniformExprTppl d ->
     TmDist {
       dist = DUniform {
-        a = compileExprTppl context d.a,
-        b = compileExprTppl context d.b
+        a = compileExprTppl context scope d.a,
+        b = compileExprTppl context scope d.b
       },
       ty = tyunknown_,
       info = d.info
@@ -687,8 +644,8 @@ lang TreePPLCompile
   | UniformDiscreteExprTppl d ->
     TmDist {
       dist = DUniformDiscrete {
-        a = compileExprTppl context d.a,
-        b = compileExprTppl context d.b
+        a = compileExprTppl context scope d.a,
+        b = compileExprTppl context scope d.b
       },
       ty = tyunknown_,
       info = d.info
@@ -697,8 +654,8 @@ lang TreePPLCompile
 | ReciprocalExprTppl d ->
     TmDist {
       dist = DReciprocal {
-        a = compileExprTppl context d.a,
-        b = compileExprTppl context d.b
+        a = compileExprTppl context scope d.a,
+        b = compileExprTppl context scope d.b
       },
       ty = tyunknown_,
       info = d.info
@@ -706,7 +663,7 @@ lang TreePPLCompile
 
   | VariableExprTppl v ->
     TmVar {
-      ident = v.ident.v,
+      ident = optionMapOr v.ident.v (lam x. x.name) (mapLookup v.ident.v scope),
       ty = tyunknown_,
       info = v.info,
       frozen = false
@@ -715,7 +672,7 @@ lang TreePPLCompile
   | IsExprTppl x ->
     TmMatch {
       info = x.info,
-      target = compileExprTppl context x.thing, -- and constructor
+      target = compileExprTppl context scope x.thing, -- and constructor
       pat = PatCon {
         info = x.constructor.i,
         ty = tyunknown_,
@@ -750,8 +707,8 @@ lang TreePPLCompile
     let s = nameSym "start" in
     let e = nameSym "end" in
     let idx = nameSym "idx" in
-    let_ s (compileExprTppl context x.beginVal)
-      (let_ e (compileExprTppl context x.endVal)
+    let_ s (compileExprTppl context scope x.beginVal)
+      (let_ e (compileExprTppl context scope x.endVal)
         (app_ (app_ (const_ (CCreate {})) (addi_ (subi_ (var_ e) (var_ s)) (int_ 1)))
           (lam_ idx (addi_ (var_ idx) (var_ s)))))
 
@@ -759,9 +716,11 @@ lang TreePPLCompile
     let mkField : {key : {v:String, i:Info}, value : Option ExprTppl} -> (SID, Expr) = lam field.
       let sid = stringToSid field.key.v in
       let ce = lam x.
-        compileExprTppl context x
+        compileExprTppl context scope x
       in
-      let val = optionMapOr (withInfo field.key.i (var_ field.key.v)) ce field.value in
+      let n = nameNoSym field.key.v in
+      let n = optionMapOr n (lam x. x.name) (mapLookup n scope) in
+      let val = optionMapOr (withInfo field.key.i (nvar_ n)) ce field.value in
       (sid, val) in
     let fields = mapFromSeq cmpSID (map mkField x.fields) in
     let record = TmRecord { bindings = fields, ty = tyunknown_, info = x.info } in
@@ -773,10 +732,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpAdd ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -786,10 +745,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpSub ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -797,7 +756,7 @@ lang TreePPLCompile
     TmApp {
       info = x.info,
       lhs = mkOp x.info (OpNeg ()),
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -807,10 +766,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpMul ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -820,10 +779,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = nvar_ context.matrixMul,
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -833,10 +792,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = nvar_ context.matrixAdd,
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -846,10 +805,10 @@ lang TreePPLCompile
         lhs = TmApp {
           info = x.info,
           lhs = mkOp x.info (OpPow ()),
-          rhs = compileExprTppl context x.left,
+          rhs = compileExprTppl context scope x.left,
           ty = tyunknown_
         },
-        rhs = compileExprTppl context x.right,
+        rhs = compileExprTppl context scope x.right,
         ty = tyunknown_
       }
 
@@ -859,10 +818,10 @@ lang TreePPLCompile
         lhs = TmApp {
           info = x.info,
           lhs = nvar_ context.matrixMulFloat,
-          rhs = compileExprTppl context x.left,
+          rhs = compileExprTppl context scope x.left,
           ty = tyunknown_
         },
-        rhs = compileExprTppl context x.right,
+        rhs = compileExprTppl context scope x.right,
         ty = tyunknown_
       }
 
@@ -872,10 +831,10 @@ lang TreePPLCompile
         lhs = TmApp {
           info = x.info,
           lhs = nvar_ context.matrixMulFloat,
-          rhs = compileExprTppl context x.right, -- the scalar is on the right
+          rhs = compileExprTppl context scope x.right, -- the scalar is on the right
           ty = tyunknown_
         },
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       }
 
@@ -885,15 +844,15 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpDiv ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
   | ConvIntToRealExprTppl x ->
-    withInfo x.info (int2float_ (compileExprTppl context x.val))
+    withInfo x.info (int2float_ (compileExprTppl context scope x.val))
 
   | LessEqExprTppl x ->
     TmApp {
@@ -901,10 +860,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpLeq ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -914,10 +873,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpLt ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -927,10 +886,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpGt ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -941,10 +900,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpGeq ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -954,10 +913,10 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpEq ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
@@ -967,19 +926,19 @@ lang TreePPLCompile
       lhs = TmApp {
         info = x.info,
         lhs = mkOp x.info (OpNeq ()),
-        rhs = compileExprTppl context x.left,
+        rhs = compileExprTppl context scope x.left,
         ty = tyunknown_
       },
-      rhs = compileExprTppl context x.right,
+      rhs = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
   | AndExprTppl x ->
     TmMatch {
       info = x.info,
-      target = compileExprTppl context x.left,
+      target = compileExprTppl context scope x.left,
       pat = PatBool { val = true, info = get_ExprTppl_info x.left, ty = tyunknown_ },
-      thn = compileExprTppl context x.right,
+      thn = compileExprTppl context scope x.right,
       els = TmConst { info = x.info, ty = tyunknown_, val = CBool { val = false } },
       ty = tyunknown_
     }
@@ -987,17 +946,17 @@ lang TreePPLCompile
   | OrExprTppl x ->
     TmMatch {
       info = x.info,
-      target = compileExprTppl context x.left,
+      target = compileExprTppl context scope x.left,
       pat = PatBool { val = true, info = get_ExprTppl_info x.left, ty = tyunknown_ },
       thn = TmConst { info = x.info, ty = tyunknown_, val = CBool { val = true } },
-      els = compileExprTppl context x.right,
+      els = compileExprTppl context scope x.right,
       ty = tyunknown_
     }
 
   | NotExprTppl x ->
     TmMatch {
       info = x.info,
-      target = compileExprTppl context x.right,
+      target = compileExprTppl context scope x.right,
       pat = PatBool { val = true, info = get_ExprTppl_info x.right, ty = tyunknown_ },
       thn = TmConst { info = x.info, ty = tyunknown_, val = CBool { val = false } },
       els = TmConst { info = x.info, ty = tyunknown_, val = CBool { val = true } },
@@ -1024,18 +983,18 @@ lang TreePPLCompile
       , ty = tyunknown_
       , info = x.info
       } in
-    let idx = compileExprTppl context x.idx in
+    let idx = compileExprTppl context scope x.idx in
     match x.lastIdx with Some lastIdx then
       let n = nameSym "start" in
       let start = subi_ (var_ n) (int_ 1) in
-      let len = addi_ (subi_ (compileExprTppl context lastIdx) (var_ n)) (int_ 1) in
-      let_ n idx (subseq_ (compileExprTppl context x.left) start len)
+      let len = addi_ (subi_ (compileExprTppl context scope lastIdx) (var_ n)) (int_ 1) in
+      let_ n idx (subseq_ (compileExprTppl context scope x.left) start len)
     else
-      app_ (app_ (const_ (CGet ())) (compileExprTppl context x.left)) (subi_ idx (int_ 1))
+      app_ (app_ (const_ (CGet ())) (compileExprTppl context scope x.left)) (subi_ idx (int_ 1))
 
   | SequenceExprTppl x ->
     let ce = lam x.
-      compileExprTppl context x
+      compileExprTppl context scope x
     in
     TmSeq {
       tms = map ce x.values,
@@ -1164,6 +1123,7 @@ lang TreePPLThings = TreePPLAst + TreePPLCompile
       , matrixMul = _getVarExn "matMulExn" matrixEnv
       , matrixAdd = _getVarExn "matAddExn" matrixEnv
       , matrixMulFloat = _getVarExn "matScale" matrixEnv
+      , functionDepth = 0
       } in
 
     -- 1. Type and constructor definitions. *All* types are inserted
