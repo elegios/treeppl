@@ -145,6 +145,7 @@ testMain [substituter] directories location (lam api.
   api.tests []
     (elem
       [ "lib/models/lang/anonymous.tppl"
+      , "lib/models/lang/val.tppl"
       , "lib/models/lang/externals.tppl"
       , "lib/models/lang/hello.tppl"
       , "lib/models/lang/matrix-tests.tppl"
@@ -167,16 +168,17 @@ testMain [substituter] directories location (lam api.
   -- `observe`/`weight` statements, thus smc will never work on them.
   api.tests []
     (elem
-     [ "lib/models/lang/anonymous.tppl"
-     , "lib/models/lang/blub.tppl"
-     , "lib/models/lang/distributions.tppl"
-     , "lib/models/lang/externals.tppl"
-     , "lib/models/lang/hello.tppl"
-     , "lib/models/lang/matrix-tests.tppl"
-     , "lib/models/lang/mini-mat-test.tppl"
-     , "lib/models/lang/ser-list.tppl"
-     , "lib/models/lang/tensors.tppl"
-     ])
+      [ "lib/models/lang/anonymous.tppl"
+      , "lib/models/lang/val.tppl"
+      , "lib/models/lang/blub.tppl"
+      , "lib/models/lang/distributions.tppl"
+      , "lib/models/lang/externals.tppl"
+      , "lib/models/lang/hello.tppl"
+      , "lib/models/lang/matrix-tests.tppl"
+      , "lib/models/lang/mini-mat-test.tppl"
+      , "lib/models/lang/ser-list.tppl"
+      , "lib/models/lang/tensors.tppl"
+      ])
     (concat
       (someModesWith ["compile", "smc-apf"] (Fail ()))
       (someModesWith ["compile", "smc-bpf"] (Fail ())));

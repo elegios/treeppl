@@ -1,0 +1,141 @@
+/*
+ * File: val.tppl
+ * Description: Examples of the function-scoped semantics of `val`.
+ */
+
+// Error messages from misusing `val`: https://claude.ai/artifact/9s35J2n9f7WR5z8kiizxrf
+
+// Parameters can be rebound like any other `val`.
+function collatzSteps(n: Int) => Int {
+  val steps = 0;
+  for i in 1 to 1000 {
+    if n != 1 {
+      if n - 2 * (n / 2) == 0 {
+        val n = n / 2;
+      } else {
+        val n = 3 * n + 1;
+      }
+      val steps = steps + 1;
+    }
+  }
+  return steps;
+}
+
+function describe(x: Int) => String {
+  // Bound on every path through the `if`, so usable afterwards.
+  if x < 0 {
+    val kind = "negative";
+  } else {
+    if x == 0 {
+      val kind = "zero";
+    } else {
+      val kind = "positive";
+    }
+  }
+  return kind;
+}
+
+function firstAbove(xs: Int[], limit: Int) => Int {
+  // A path that returns need not bind anything.
+  val n = length(xs);
+  for i in 1 to n {
+    if xs[i] > limit {
+      return i;
+    }
+  }
+  return 0;
+}
+
+model function example() => () {
+  // A conditional update survives the `if`.
+  val x = -7;
+  val absX = x;
+  if x < 0 {
+    val absX = -x;
+  }
+  printLn(paste0(["|", int2string(x), "| = ", int2string(absX)]));
+
+  printLn(paste0(["-3 is ", describe(-3), ", 0 is ", describe(0), ", 4 is ", describe(4)]));
+
+  // Accumulators persist between iterations and after the loop.
+  val sum = 0;
+  for i in 1 to 10 {
+    val sum = sum + i;
+  }
+  printLn(paste0(["1 + ... + 10 = ", int2string(sum)]));
+
+  // Several loop-carried variables at once.
+  val a = 0;
+  val b = 1;
+  for i in 1 to 10 {
+    val next = a + b;
+    val a = b;
+    val b = next;
+  }
+  printLn(paste0(["fib(10) = ", int2string(a)]));
+
+  // Search with a conditional update inside a loop.
+  val xs = [3, 9, 2, 9, 7];
+  val n = length(xs);
+  val best = xs[1];
+  val bestIdx = 1;
+  for i in 1 to n {
+    if xs[i] > best {
+      val best = xs[i];
+      val bestIdx = i;
+    }
+  }
+  printLn(paste0(["max is ", int2string(best), " at index ", int2string(bestIdx)]));
+
+  // The previous iteration's value is visible in the next one.
+  val prev = 0;
+  val increasing = true;
+  for i in 1 to n {
+    if xs[i] < prev {
+      val increasing = false;
+    }
+    val prev = xs[i];
+  }
+  printLn(paste0(["xs is increasing: ", bool2string(increasing)]));
+
+  // Counting events from a loop.
+  val evens = 0;
+  for i in 1 to 20 {
+    if i - 2 * (i / 2) == 0 {
+      val evens = evens + 1;
+    }
+  }
+  printLn(paste0(["evens in 1..20: ", int2string(evens)]));
+
+  printLn(paste0(["collatz steps from 27: ", int2string(collatzSteps(27))]));
+  printLn(paste0(["first element above 5 is at index ", int2string(firstAbove(xs, 5))]));
+
+  // A name has one type per function, so an annotation on the first
+  // binding also covers the later ones.
+  val mean: Real = 0.0;
+  for i in 1 to n {
+    val mean = mean + Real(xs[i]) / Real(n);
+  }
+  printLn(paste0(["mean of xs: ", real2string(mean)]));
+
+  // A nested function is a separate scope, where the same name may
+  // have another type.
+  val label = 42;
+  val describeLabel = function() => String {
+    val label = "the answer";
+    return label;
+  };
+  printLn(paste0([describeLabel(), " is ", int2string(label)]));
+
+  // Parameters of a nested function may reuse names from the
+  // enclosing one.
+  val scale = 10;
+  val scaled = function(scale: Int) => Int { return 2 * scale; };
+  printLn(paste0(["scaled(3) = ", int2string(scaled(3)), ", scale is still ", int2string(scale)]));
+
+  // A closure sees the binding in effect where it was created.
+  val y = 1;
+  val getY = function() => Int { return y; };
+  val y = 2;
+  printLn(paste0(["closure sees ", int2string(getY()), ", y is now ", int2string(y)]));
+}
