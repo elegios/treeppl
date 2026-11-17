@@ -21,18 +21,18 @@ type Globals = Globals {
 
 function gHatLog(g: Globals, t: Real) => Real {
 
-    let r = g.lambda - g.mu;
+    val r = g.lambda - g.mu;
     
-    let x = g.lambda - (g.lambda - r/g.rho)*exp(-r*t);
+    val x = g.lambda - (g.lambda - r/g.rho)*exp(-r*t);
 
     return (-t*r - 2.0 * log(x));
 }
 
 function sLog(g: Globals, t: Real) => Real {
 
-    let r = g.lambda - g.mu;
+    val r = g.lambda - g.mu;
     
-    let x = g.lambda - (g.lambda - r/g.rho)*exp(-r*t);
+    val x = g.lambda - (g.lambda - r/g.rho)*exp(-r*t);
 
     return log(r) - log(x);
 }
@@ -56,32 +56,32 @@ model function crbd(tree: Tree, rho: Real) => Real[] {
     
     // Set priors such that net diversification (lambda - mu) is likely
     // to generate a tree of the observed size.
-    let numLeaves = int2real(countLeaves(tree));
-    let expectedTotalLeaves = numLeaves / rho;
-    let meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
+    val numLeaves = int2real(countLeaves(tree));
+    val expectedTotalLeaves = numLeaves / rho;
+    val meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
 
     assume lambda ~ Gamma(1.0, meanLambdaPrior);
     assume epsilon ~ Uniform(0.0,1.0);
-    let mu = epsilon*lambda;
+    val mu = epsilon*lambda;
 
-    let g = Globals {
+    val g = Globals {
         lambda = lambda,
         mu     = mu,
         rho    = rho
     };
 
     // Compute likelihood of tree analytically
-    let recursiveTreeLogLike = 2.0*gHatLog(g, tree.age) + walk(g, tree.left) + walk(g, tree.right);
-    let treeLogLike =  (numLeaves-2.0)*log(g.lambda) +  numLeaves*log(g.rho) + recursiveTreeLogLike;
+    val recursiveTreeLogLike = 2.0*gHatLog(g, tree.age) + walk(g, tree.left) + walk(g, tree.right);
+    val treeLogLike =  (numLeaves-2.0)*log(g.lambda) +  numLeaves*log(g.rho) + recursiveTreeLogLike;
     logWeight treeLogLike;
 
     // Compensate for the rotation of interior nodes in the
     // observed tree, and labeling of the leaves in the tree
-    let correction = (log(2.0) * (numLeaves-1.0) - logFactorial(numLeaves));
+    val correction = (log(2.0) * (numLeaves-1.0) - logFactorial(numLeaves));
     logWeight correction;
 
     // Estimate effect of conditioning on survival
-    let scondLogLike = 2.0*sLog(g, tree.age);
+    val scondLogLike = 2.0*sLog(g, tree.age);
     logWeight -scondLogLike;
 
     return [lambda, mu];

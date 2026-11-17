@@ -19,17 +19,17 @@ function polynomialFunction(coeff: Real[], x: Real) => Real {
 
 model function poly(data: Real[][]) => Int {
     assume n ~ Poisson(1.0); // sample the degree of the polynomial
-    let sigma = 1.0; // noise term
+    val sigma = 1.0; // noise term
 
     // Sample the coefficients from n + 1 (we need one coeff for const poly)
-    let coeffs = repApply(n + 1, function(i : Int) => Real {
+    val coeffs = repApply(n + 1, function(i : Int) => Real {
         assume g ~ Normal(0.0, 1.0);
         return g;
     });
 
     // likelihood
     sapply(data, function(datum: Real[]) {
-        let predictedY = polynomialFunction(coeffs, datum[1]);
+        val predictedY = polynomialFunction(coeffs, datum[1]);
         observe datum[2] ~ Normal(predictedY, sigma);
     });
 

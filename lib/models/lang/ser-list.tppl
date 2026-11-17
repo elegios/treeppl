@@ -1,8 +1,8 @@
 model function distributions() => Real[][] {
-  let dirAlphas = [2.0, 3.0, 5.0];
+  val dirAlphas = [2.0, 3.0, 5.0];
 
-  let myDirP = Dirichlet(dirAlphas);
-  let someDir = repDraw(10, myDirP);
+  val myDirP = Dirichlet(dirAlphas);
+  val someDir = repDraw(10, myDirP);
 
   // dump(someDir);
 

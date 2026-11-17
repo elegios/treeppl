@@ -76,7 +76,7 @@ function _mtxPow(mtx : Matrix[Real], pow : Int) => Matrix[Real] {
      return mtx;
   }
   if mathModi(pow)(2) == 0 {
-     let halfPow = _mtxPow(mtx, pow/2);
+     val halfPow = _mtxPow(mtx, pow/2);
      return mtxMul(halfPow, halfPow);
   }
   return mtxMul(mtx, _mtxPow(mtx, pow-1));

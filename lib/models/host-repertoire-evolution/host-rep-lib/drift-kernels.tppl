@@ -20,7 +20,7 @@ function simplexMove(x: Real[], alpha: Real, epsilon: Real) => Dist[Real[]] {
    * https://github.com/revbayes/revbayes/blob/master/src/core/moves/proposal/simplex/DirichletSimplexProposal.cpp
    *
    */
-  let newParamFun = function (a: Real) => Real {
+  val newParamFun = function (a: Real) => Real {
     if a > epsilon {
       if a < 1. - epsilon {
         return a * alpha;
@@ -31,7 +31,7 @@ function simplexMove(x: Real[], alpha: Real, epsilon: Real) => Dist[Real[]] {
       return (a + epsilon) * alpha;
     }
   };
-  let newParams = sapply(x, newParamFun);
+  val newParams = sapply(x, newParamFun);
   return Dirichlet(newParams);
 }
 
@@ -63,10 +63,10 @@ function categoricalShiftKernel(
    * differently by RevBayes and cannot be emulated in TreePPL in a natural
    * way
    */ 
-  let currProb = param[x + 1];
+  val currProb = param[x + 1];
   if currProb < 1. - errMargin {
-    let nextProb = currProb * (1. - lambda);
-    let newParam = sapply(
+    val nextProb = currProb * (1. - lambda);
+    val newParam = sapply(
       1 to (length(param)), 
       function (i: Int) => Real {
         if i == x {

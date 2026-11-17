@@ -30,9 +30,9 @@ function numTrialsUntilMRCADetection(g: Globals, gdist: GammaDist, tRoot: Real, 
         return 0;
     }
 
-    let ret = isDetected(g, gdist, tRoot);
+    val ret = isDetected(g, gdist, tRoot);
     if (ret.detected) {
-        let ret = isDetected(g, ret.gdist, tRoot);
+        val ret = isDetected(g, ret.gdist, tRoot);
         if (ret.detected) {
             return 1;       // We are detected, terminate
         }
@@ -46,10 +46,10 @@ function numTrialsUntilMRCADetection(g: Globals, gdist: GammaDist, tRoot: Real, 
 // whether any descendant will be detected at present (at t = 0.0)
 function isDetected(g: Globals, gdist: GammaDist, tBegin: Real) => GammaBool {
 
-    let ret = drawGammaExponential(gdist, 1.0 + g.epsilon);
-    let gdist = ret.gdist;
-    let waitingTime = ret.rv;
-    let newTime = tBegin - waitingTime;
+    val draw = drawGammaExponential(gdist, 1.0 + g.epsilon);
+    val gdist = draw.gdist;
+    val waitingTime = draw.rv;
+    val newTime = tBegin - waitingTime;
 
     if (newTime < 0.0) {
         assume detected ~ Bernoulli(g.rho);
@@ -62,7 +62,7 @@ function isDetected(g: Globals, gdist: GammaDist, tBegin: Real) => GammaBool {
     assume isSpeciation ~ Bernoulli(1.0 / (1.0 + g.epsilon));
 
     if (isSpeciation) {
-        let ret = isDetected(g, gdist, newTime);
+        val ret = isDetected(g, gdist, newTime);
         if (ret.detected) {
             return ret;
         }
@@ -80,38 +80,38 @@ function isDetected(g: Globals, gdist: GammaDist, tBegin: Real) => GammaBool {
 // Simulate hidden speciation along an observed branch
 function simHiddenSpeciation(g: Globals, gdist: GammaDist, startTime: Real, endTime: Real) => GammaDist {
 
-    let ret = drawGammaExponential(gdist, 1.0);
-    let gdist = ret.gdist;
-    let waitingTime = ret.rv;
-    let newTime = startTime - waitingTime;
+    val draw = drawGammaExponential(gdist, 1.0);
+    val gdist = draw.gdist;
+    val waitingTime = draw.rv;
+    val newTime = startTime - waitingTime;
 
     // Handle speciation before end of branch
     if (newTime > endTime) {
-        let ret = isDetected(g, gdist, newTime);
+        val ret = isDetected(g, gdist, newTime);
         if (ret.detected) {
             weight 0.0;
             return ret.gdist;
         }
         weight 2.0;
-        let gdist = observeGammaPoisson(0, ret.gdist, g.epsilon*waitingTime);
+        val gdist = observeGammaPoisson(0, ret.gdist, g.epsilon*waitingTime);
         return simHiddenSpeciation(g, gdist, newTime, endTime);
     }
 
     // We reached the end of the branch
-    let gdist = observeGammaPoisson(0, gdist, g.epsilon*(startTime-endTime));
+    val gdist = observeGammaPoisson(0, gdist, g.epsilon*(startTime-endTime));
     return gdist;
 }
 
 // Simulate process ("walk") along the observed tree
 function walk(g: Globals, gdist: GammaDist, parentAge: Real, node: Tree) => GammaDist {
 
-    let nodeAge = node.age;
-    let gdist = simHiddenSpeciation(g, gdist, parentAge, nodeAge);
+    val nodeAge = node.age;
+    val gdist = simHiddenSpeciation(g, gdist, parentAge, nodeAge);
 
     if (node is Node) {
-        let gdist = observeGammaExponential(0.0, gdist, 1.0);   // Speciation at end of branch
+        val gdist = observeGammaExponential(0.0, gdist, 1.0);   // Speciation at end of branch
         resample;
-        let gdist = walk(g, gdist, nodeAge, node.left);
+        val gdist = walk(g, gdist, nodeAge, node.left);
         return      walk(g, gdist, nodeAge, node.right);
     } else { // node is Leaf
         observe true ~ Bernoulli(g.rho);  // The leaf was detected
@@ -125,12 +125,12 @@ model function crbd(tree: Tree, rho: Real) => Real[] {
 
     // Set priors such that net diversification (lambda - mu) is likely
     // to generate a tree of the observed size.
-    let numLeaves = int2real(countLeaves(tree));
-    let expectedTotalLeaves = numLeaves / rho;
-    let meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
+    val numLeaves = int2real(countLeaves(tree));
+    val expectedTotalLeaves = numLeaves / rho;
+    val meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
 
     // Define the conjugate prior
-    let gdist = GammaDist {
+    val gdist = GammaDist {
         alpha = 1.0,
         beta  = 1.0/meanLambdaPrior
     };
@@ -138,7 +138,7 @@ model function crbd(tree: Tree, rho: Real) => Real[] {
     assume epsilon ~ Uniform(0.0,1.0)               drift Uniform(max(epsilon-0.1,0.0),min(epsilon+0.1,1.0));
 
     // Define the globals
-    let g = Globals {
+    val g = Globals {
         epsilon = epsilon,
         rho     = rho
     };
@@ -149,17 +149,17 @@ model function crbd(tree: Tree, rho: Real) => Real[] {
     logWeight log(2.0) * (numLeaves - 1.0) - logFactorial(numLeaves);
 
     // Simulate conditional on the observed tree
-    let gdist = walk(g, gdist, tree.age, tree.left);
-    let gdist = walk(g, gdist, tree.age, tree.right);
+    val gdist = walk(g, gdist, tree.age, tree.left);
+    val gdist = walk(g, gdist, tree.age, tree.right);
 
     // Estimate effect of conditioning on survival
-    let m = numTrialsUntilMRCADetection(g, gdist, tree.age, 1000);
+    val m = numTrialsUntilMRCADetection(g, gdist, tree.age, 1000);
     weight int2real(m);
     resample;
 
     // Sample expectations
-    let lambda = gdist.alpha/gdist.beta;
-    let mu = g.epsilon*lambda;
+    val lambda = gdist.alpha/gdist.beta;
+    val mu = g.epsilon*lambda;
 
     return [gdist.alpha, gdist.beta, lambda, mu, int2real(m)];
 }

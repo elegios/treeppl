@@ -6,9 +6,9 @@ function rateMatrixToEmbeddedMarkovChain(
 ) => EmbeddedMarkovChainMatrix {
   // Construct a sequence representations of the qMatrix which we can later
   // use for sampling from the embedded Markov Chain
-  let q1 = -mtxGet(1, 1, qMatrix);
-  let q2 = -mtxGet(2, 2, qMatrix);
-  let q3 = -mtxGet(3, 3, qMatrix);
+  val q1 = -mtxGet(1, 1, qMatrix);
+  val q2 = -mtxGet(2, 2, qMatrix);
+  val q3 = -mtxGet(3, 3, qMatrix);
   return EmbeddedMarkovChainMatrix {
     totalRates = [q1, q2, q3],
     transitionProbs = [
@@ -49,7 +49,7 @@ function n2s(repertoire: Int[]) => Int {
 }
 
 function updateRepertoire(currRep: Int[], event: Event, nhosts: Int) => Int[] {
-  let hostIndex = event.host;
+  val hostIndex = event.host;
   return paste0(
     [
       slice(currRep, 1, hostIndex),
@@ -72,7 +72,7 @@ function sampleNextEvent(
     if currState == 2 {
       return 1;
     } else {
-      let param = embeddedQMatrix.transitionProbs[currState + 1];
+      val param = embeddedQMatrix.transitionProbs[currState + 1];
       assume nextState ~ Categorical(param);
       return nextState;
     }

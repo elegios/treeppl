@@ -6,8 +6,8 @@
 // This tests whether inference works for recursive models
 
 model function wgeom() => Int {
-  let q = 3. / 4.;
-  let p = 1. / 2.;
+  val q = 3. / 4.;
+  val p = 1. / 2.;
   assume flip ~ Bernoulli(q) drift Bernoulli(p);
   return manyCoins(p, q, flip);
 }

@@ -17,7 +17,7 @@ function printLn(msg : String) {
 }
 
 function printMtx(m: Matrix[Real]) {
-  let dimensions = dim(m);
+  val dimensions = dim(m);
   printErrorLn( paste0( [ "[[ "
                  , int2string( dimensions[1] )
                  , " x "

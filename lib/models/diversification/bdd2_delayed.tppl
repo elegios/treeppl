@@ -45,13 +45,13 @@ type BDDCase =
 function predictUndetectedProb(g: Globals, d: Dists, multiplier: Real, time: Real) => Real {
 
     // Effective time
-    let logAlpha = d.nigdist.mu0;
-    let effectiveTime = time * exp(logAlpha) / 2.0;
+    val logAlpha = d.nigdist.mu0;
+    val effectiveTime = time * exp(logAlpha) / 2.0;
 
     // Expected number of leaves
-    let lambda = d.gdist.alpha / d.gdist.beta;
-    let mu = g.epsilon * lambda;
-    let expectedLeaves = exp(effectiveTime*multiplier*(lambda-mu));
+    val lambda = d.gdist.alpha / d.gdist.beta;
+    val mu = g.epsilon * lambda;
+    val expectedLeaves = exp(effectiveTime*multiplier*(lambda-mu));
 
     // All leaves need to be unobserved
     return ((1.0-g.rho)^expectedLeaves);
@@ -90,9 +90,9 @@ function numTrialsUntilMRCADetection(g: Globals, d: Dists, tRoot: Real, mMax: In
     }
 
     // Both descendants of the MRCA need to survive
-    let ret = isDetected(g, d, 1.0, tRoot);
+    val ret = isDetected(g, d, 1.0, tRoot);
     if (ret.detected) {
-        let ret = isDetected(g, ret.d, 1.0, tRoot);
+        val ret = isDetected(g, ret.d, 1.0, tRoot);
         if (ret.detected) {
             // MRCA is detected, terminate (and add failures in backward recursion)
             return 1;
@@ -127,19 +127,19 @@ function isDetected(g: Globals, d: Dists, multiplier: Real, tBegin: Real) => Dis
     }
 
     // We always need to consider the possibility of an event
-    let ret1 = drawGammaExponential(d.gdist,multiplier*(1.0+g.epsilon));
-    let waitingTime = ret1.rv;
+    val ret1 = drawGammaExponential(d.gdist,multiplier*(1.0+g.epsilon));
+    val waitingTime = ret1.rv;
 
     // Find out BDD case and time segment we will be considering
     // Note that tEnd is 0, so timeSegment=(tBegin-0)=tBegin
-    let b = bddCase(tBegin, waitingTime, g.deltaT);
+    val b = bddCase(tBegin, waitingTime, g.deltaT);
 
     // Let the diversification rates shift
-    let ret2 = drawNormalInverseGammaNormal(d.nigdist);
-    let multiplier = exp(ret2.rv*b.timeSegment)*multiplier;
+    val ret2 = drawNormalInverseGammaNormal(d.nigdist);
+    val multiplier = exp(ret2.rv*b.timeSegment)*multiplier;
 
     // Update distributions
-    let d = Dists {
+    val d = Dists {
         gdist   = ret1.gdist,
         nigdist = ret2.nigdist
     };
@@ -154,7 +154,7 @@ function isDetected(g: Globals, d: Dists, multiplier: Real, tBegin: Real) => Dis
     }
 
     // Protect multiplier from becoming so low it causes numerical problems
-    let multiplier = max(multiplier, 1e-6);
+    val multiplier = max(multiplier, 1e-6);
 
     // Catch survival until recent
     if (b is EndOfBranch) {
@@ -174,7 +174,7 @@ function isDetected(g: Globals, d: Dists, multiplier: Real, tBegin: Real) => Dis
     assume isSpeciation ~ Bernoulli(1.0/(1.0+g.epsilon));
 
     if (isSpeciation) {
-        let ret = isDetected(g, d, multiplier, tBegin-b.timeSegment);
+        val ret = isDetected(g, d, multiplier, tBegin-b.timeSegment);
         if (ret.detected) {
             return ret;
         }
@@ -192,21 +192,21 @@ function isDetected(g: Globals, d: Dists, multiplier: Real, tBegin: Real) => Dis
 function simHiddenSpeciation(g: Globals, d: Dists, multiplier: Real, tBegin:Real, tEnd: Real) => Params {
 
     // We always need to consider the possibility of speciation
-    let ret1 = drawGammaExponential(d.gdist,multiplier);
-    let waitingTime = ret1.rv;
+    val ret1 = drawGammaExponential(d.gdist,multiplier);
+    val waitingTime = ret1.rv;
 
     // Find out BDD case and time segment we will be considering
-    let b = bddCase(tBegin-tEnd, waitingTime, g.deltaT);
+    val b = bddCase(tBegin-tEnd, waitingTime, g.deltaT);
 
     // We cannot die during this time segment
-    let gdist = observeGammaPoisson(0, ret1.gdist, multiplier*g.epsilon*b.timeSegment);
+    val gdist = observeGammaPoisson(0, ret1.gdist, multiplier*g.epsilon*b.timeSegment);
 
     // Let the diversification rates shift
-    let ret2 = drawNormalInverseGammaNormal(d.nigdist);
-    let multiplier = exp(ret2.rv*b.timeSegment)*multiplier;
+    val ret2 = drawNormalInverseGammaNormal(d.nigdist);
+    val multiplier = exp(ret2.rv*b.timeSegment)*multiplier;
 
     // Update distributions
-    let d = Dists {
+    val d = Dists {
         gdist   = gdist,
         nigdist = ret2.nigdist
     };
@@ -222,7 +222,7 @@ function simHiddenSpeciation(g: Globals, d: Dists, multiplier: Real, tBegin:Real
     }
 
     // Protect multiplier from becoming so low it causes numerical problems
-    let multiplier = max(multiplier, 1e-6);
+    val multiplier = max(multiplier, 1e-6);
 
     // Test for termination case (end of branch)
     if (b is EndOfBranch) {
@@ -233,13 +233,13 @@ function simHiddenSpeciation(g: Globals, d: Dists, multiplier: Real, tBegin:Real
     }
 
     // Compute new time point
-    let tNew = tBegin - b.timeSegment;
+    val tNew = tBegin - b.timeSegment;
 
     // If waitingTime is smallest, there is the hidden subtree resulting from
     // the speciation event to consider
     if (b is Event) {
-        let ret = isDetected(g, d, multiplier, tNew);
-        let d = ret.d;
+        val ret = isDetected(g, d, multiplier, tNew);
+        val d = ret.d;
         if (ret.detected) {
             weight 0.0;
             return Params {
@@ -259,18 +259,18 @@ function simHiddenSpeciation(g: Globals, d: Dists, multiplier: Real, tBegin:Real
 function walk(g: Globals, d: Dists, multiplier: Real, parentAge: Real, node: Tree) => Dists {
 
     // Simulate hidden speciation on the ancestral branch
-    let nodeAge = node.age;
-    let p = simHiddenSpeciation(g, d, multiplier, parentAge, nodeAge);
+    val nodeAge = node.age;
+    val p = simHiddenSpeciation(g, d, multiplier, parentAge, nodeAge);
 
     // Deal with the end of the branch
     if (node is Node) {
-        let gdist = observeGammaExponential(0.0, p.d.gdist, p.multiplier);
+        val gdist = observeGammaExponential(0.0, p.d.gdist, p.multiplier);
         resample;
-        let d = Dists {
+        val d = Dists {
                     nigdist     = p.d.nigdist,
                     gdist       = gdist
                 };
-        let d = walk(g, d, p.multiplier, nodeAge, node.left);
+        val d = walk(g, d, p.multiplier, nodeAge, node.left);
         return  walk(g, d, p.multiplier, nodeAge, node.right);
     } else {
         observe true ~ Bernoulli(g.rho);
@@ -283,35 +283,35 @@ function walk(g: Globals, d: Dists, multiplier: Real, parentAge: Real, node: Tre
 model function bdd2(tree: Tree, rho: Real, numIntervals: Int) => Real[] {
 
     // Compute the time for one of the intervals
-    let deltaT = tree.age / int2real(numIntervals);
+    val deltaT = tree.age / int2real(numIntervals);
 
     // Set priors such that net diversification (lambda - mu) is likely
     // to generate a tree of the expected size.
-    let numLeaves = int2real(countLeaves(tree));
-    let expectedTotalLeaves = numLeaves / rho;
-    let meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
+    val numLeaves = int2real(countLeaves(tree));
+    val expectedTotalLeaves = numLeaves / rho;
+    val meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
 
     // Define the priors
-    let gdist = GammaDist {
+    val gdist = GammaDist {
         alpha = 1.0,
         beta  = 1.0/meanLambdaPrior
     };
 
-    let nigdist = NormalInverseGammaDist {
+    val nigdist = NormalInverseGammaDist {
         mu0    = 0.0,
         lambda = 1.0,
         alpha  = 1.0,
         beta   = 0.2*meanLambdaPrior
     };
 
-    let d = Dists {
+    val d = Dists {
         gdist   = gdist,
         nigdist = nigdist
     };
 
     assume epsilon ~ Uniform(0.0,1.0)               drift Uniform(max(epsilon-0.05,0.0),min(epsilon+0.05,1.0));
 
-    let g = Globals {
+    val g = Globals {
         epsilon = epsilon,
         rho     = rho,
         deltaT  = deltaT
@@ -321,19 +321,19 @@ model function bdd2(tree: Tree, rho: Real, numIntervals: Int) => Real[] {
     logWeight log(2.0) * (numLeaves - 1.0) - logFactorial(numLeaves);
 
     // Walk over tree
-    let d = walk(g, d, 1.0, tree.age, tree.left);
-    let d = walk(g, d, 1.0, tree.age, tree.right);
+    val d = walk(g, d, 1.0, tree.age, tree.left);
+    val d = walk(g, d, 1.0, tree.age, tree.right);
 
     // Condition on MRCA detection
-    let m = numTrialsUntilMRCADetection(g, d, tree.age, 1000);
+    val m = numTrialsUntilMRCADetection(g, d, tree.age, 1000);
     weight int2real(m);
     resample;
 
     // Compute expectations
-    let lambda   = d.gdist.alpha/d.gdist.beta;
-    let mu       = g.epsilon*lambda;
-    let logAlpha = d.nigdist.mu0;
-    let sigma    = sqrt(d.nigdist.beta/((d.nigdist.alpha-1.0)*d.nigdist.lambda));
+    val lambda   = d.gdist.alpha/d.gdist.beta;
+    val mu       = g.epsilon*lambda;
+    val logAlpha = d.nigdist.mu0;
+    val sigma    = sqrt(d.nigdist.beta/((d.nigdist.alpha-1.0)*d.nigdist.lambda));
 
     return [lambda, mu, logAlpha, sigma, int2real(m)];
 }

@@ -32,10 +32,10 @@ model function blub(n: Int, pi: Real, trump: Bool, coinflips: Bool[], text: Stri
 
   printLn(concat("Trump was elected: ", bool2string(trump)));
 
-  let testVec = [1, 2];
+  val testVec = [1, 2];
   debug("testVec (", testVec, ") contains ", testVec[1], " and ", testVec[2]);
 
-  let coinFlipStr = sapply(coinflips, bool2string);
+  val coinFlipStr = sapply(coinflips, bool2string);
   debug("The length of the vector is ", length(coinflips), " it contains ", coinFlipStr);
 
   printLn("\nArithmetic");
@@ -86,16 +86,16 @@ model function blub(n: Int, pi: Real, trump: Bool, coinflips: Bool[], text: Stri
   debug("!true = ", !true);
 
   printLn("\nPartial application");
-  let add2 = example(_, 2);
+  val add2 = example(_, 2);
   debug("add2(1) = ", add2(1));
   debug("add2(6) = ", add2(6));
 
-  let add2and3 = example3(_, _, 3);
+  val add2and3 = example3(_, _, 3);
   debug("add2and3(1, 2) = ", add2and3(1, 2));
   debug("add2and3(6, 2) = ", add2and3(6, 2));
 
   printLn("\nDist type");
-  let d : Dist[Bool] = Bernoulli(0.5);
+  val d : Dist[Bool] = Bernoulli(0.5);
   assume f ~ d;
   debug("Drew random value: ", f);
 

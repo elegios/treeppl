@@ -6,8 +6,8 @@ function postorderTraverse(
   tree: TreeLabeled, qMatrix: Matrix[Real], interactions: Int[][], nhosts: Int
 ) => MsgTree {
   if tree is Leaf {
-    let outmsg = mtxCreate(nhosts, 3, observationMessage(interactions[tree.label], 1, nhosts));
-    let leafInts = interactions[tree.label];
+    val outmsg = mtxCreate(nhosts, 3, observationMessage(interactions[tree.label], 1, nhosts));
+    val leafInts = interactions[tree.label];
     return MsgLeaf{
       age = 0.0,
       label = tree.label,
@@ -16,21 +16,21 @@ function postorderTraverse(
     };
   }
 
-  let left = postorderTraverse(tree.left, qMatrix, interactions, nhosts);
-  let right = postorderTraverse(tree.right, qMatrix, interactions, nhosts);
+  val left = postorderTraverse(tree.left, qMatrix, interactions, nhosts);
+  val right = postorderTraverse(tree.right, qMatrix, interactions, nhosts);
 
     // These will be used when we propagate messages in the forward pass later
-  let leftKernel = mtxExp(mtxSclrMul(tree.age-left.age, qMatrix));
-  let rightKernel = mtxExp(mtxSclrMul(tree.age-right.age, qMatrix));
+  val leftKernel = mtxExp(mtxSclrMul(tree.age-left.age, qMatrix));
+  val rightKernel = mtxExp(mtxSclrMul(tree.age-right.age, qMatrix));
 
   // We are doing the backward pass, so we should transpose the kernels
-  let leftBackwardKernel = mtxTrans(leftKernel);
-  let rightBackwardKernel = mtxTrans(rightKernel);
+  val leftBackwardKernel = mtxTrans(leftKernel);
+  val rightBackwardKernel = mtxTrans(rightKernel);
 
-  let leftInMsg = mtxMul(left.outMsg, leftBackwardKernel);
-  let rightInMsg = mtxMul(right.outMsg, rightBackwardKernel);
+  val leftInMsg = mtxMul(left.outMsg, leftBackwardKernel);
+  val rightInMsg = mtxMul(right.outMsg, rightBackwardKernel);
 
-  let outMsg = mtxElemMul(leftInMsg, rightInMsg);
+  val outMsg = mtxElemMul(leftInMsg, rightInMsg);
 
   return MsgNode{
     age = tree.age, label = tree.label,
@@ -44,7 +44,7 @@ function postorderTraverse(
 // Compute leaf message from observed interactions
 function observationMessage(obsRepertoire: Int[], i: Int, max: Int) => Real[] {
   if i <= max {
-    let stateMsg = makeStateMessage(obsRepertoire[i]);
+    val stateMsg = makeStateMessage(obsRepertoire[i]);
     // Aligned, so don't use join
     return cons(
       stateMsg[1],

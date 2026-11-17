@@ -36,10 +36,10 @@ type BDDCase =
 function predictUndetectedProb(g: Globals, multiplier: Real, time: Real) => Real {
 
     // Effective time
-    let effectiveTime = time * exp(g.logAlpha) / 2.0;
+    val effectiveTime = time * exp(g.logAlpha) / 2.0;
 
     // Expected number of leaves
-    let expectedLeaves = exp(effectiveTime*multiplier*(g.lambda-g.mu));
+    val expectedLeaves = exp(effectiveTime*multiplier*(g.lambda-g.mu));
 
     // All leaves need to be unobserved
     return ((1.0-g.rho)^expectedLeaves);
@@ -117,7 +117,7 @@ function isDetected(g: Globals, multiplier: Real, tBegin: Real) => Bool {
 
     // Find out BDD case and time frame we will be considering
     // Note that tEnd is 0, so tSegment=(tBegin-0)=tBegin
-    let b = bddCase(tBegin, waitingTime, g.deltaT);
+    val b = bddCase(tBegin, waitingTime, g.deltaT);
 
     // Catch survival until recent (we have no interest in the multiplier)
     if (b is EndOfBranch) {
@@ -126,15 +126,15 @@ function isDetected(g: Globals, multiplier: Real, tBegin: Real) => Bool {
     }
 
     // Let the diversification rates shift
-    let multiplier = shiftDivRates(g, b.timeSegment)*multiplier;
+    val multiplier = shiftDivRates(g, b.timeSegment)*multiplier;
     if (multiplier > 1e4) {
         // printLn(concat("Multiplier hit upper limit in isDetected: ",real2string(multiplier)));
         return true;
     }
-    let multiplier = max(multiplier,1e-6);
+    val multiplier = max(multiplier,1e-6);
 
     // Compute new time point
-    let tNew = tBegin - b.timeSegment;
+    val tNew = tBegin - b.timeSegment;
 
     // Catch deltaT smallest
     if (b is DeltaT) {
@@ -159,19 +159,19 @@ function simHiddenSpeciation(g: Globals, multiplier: Real, tBegin:Real, tEnd: Re
     assume waitingTime ~ Exponential(multiplier*g.lambda);
 
     // Find out BDD case and time frame we will be considering
-    let b = bddCase(tBegin-tEnd, waitingTime, g.deltaT);
+    val b = bddCase(tBegin-tEnd, waitingTime, g.deltaT);
 
     // We cannot die during this time frame
     observe 0 ~ Poisson(multiplier*g.mu*b.timeSegment);
 
      // Let the diversification rates shift
-    let multiplier = shiftDivRates(g, b.timeSegment)*multiplier;
+    val multiplier = shiftDivRates(g, b.timeSegment)*multiplier;
     if (multiplier > 1e4) {
         // printLn(concat("Multiplier hit upper limit in simHiddenSpeciation: ",real2string(multiplier)));
         weight 0.0;
         return multiplier;
     }
-    let multiplier = max(multiplier,1e-6);
+    val multiplier = max(multiplier,1e-6);
 
     // Test for termination case (end of branch)
     if (b is EndOfBranch) {
@@ -179,7 +179,7 @@ function simHiddenSpeciation(g: Globals, multiplier: Real, tBegin:Real, tEnd: Re
     }
 
     // Compute new time point
-    let tNew = tBegin - b.timeSegment;
+    val tNew = tBegin - b.timeSegment;
 
     // If waitingTime is smallest, there is the hidden subtree resulting from
     // the speciation event to consider
@@ -199,8 +199,8 @@ function simHiddenSpeciation(g: Globals, multiplier: Real, tBegin:Real, tEnd: Re
 function walk(g: Globals, multiplier: Real, parentAge: Real, node: Tree) {
 
     // Simulate hidden speciation on the ancestral branch
-    let nodeAge = node.age;
-    let multiplier = simHiddenSpeciation(g, multiplier, parentAge, nodeAge);
+    val nodeAge = node.age;
+    val multiplier = simHiddenSpeciation(g, multiplier, parentAge, nodeAge);
 
     // Deal with the end of the branch
     if (node is Node) {
@@ -218,24 +218,24 @@ function walk(g: Globals, multiplier: Real, parentAge: Real, node: Tree) {
 model function bdd2(tree: Tree, rho: Real, numIntervals: Int) => Real[] {
 
     // Compute the time for one of the intervals
-    let deltaT = tree.age / int2real(numIntervals);
+    val deltaT = tree.age / int2real(numIntervals);
 
     // Set priors such that net diversification (lambda - mu) is likely
     // to generate a tree of the expected size.
-    let numLeaves = int2real(countLeaves(tree));
-    let expectedTotalLeaves = numLeaves / rho;
-    let meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
+    val numLeaves = int2real(countLeaves(tree));
+    val expectedTotalLeaves = numLeaves / rho;
+    val meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
 
     // ClaDS2-like settings (priors as in concept paper except that mean of lambda is data dependent)
     assume lambda ~ Gamma(1.0, meanLambdaPrior)     drift Uniform(lambda/1.1,lambda*1.1);               // Multiplier probably more efficient, tuning param 1.1
     assume epsilon ~ Uniform(0.0, 1.0)              drift Uniform(max(epsilon-0.1,0.0),min(epsilon+0.1,1.0));  // Sliding window, tuning param width=0.2
-    let mu = epsilon*lambda;
+    val mu = epsilon*lambda;
     assume sigma_x ~ Gamma(1.0, 1.0)                drift Gamma(sigma_x/1.1,sigma_x*1.1);               // Multiplier probably more efficient, tuning param 1.1
-    let sigma = sqrt(0.2*meanLambdaPrior/sigma_x);
+    val sigma = sqrt(0.2*meanLambdaPrior/sigma_x);
     assume logAlpha ~ Normal(0.0, sigma)          drift Uniform(logAlpha-0.05,logAlpha+0.05);         // Sliding window, tuning param width=0.1
 
     // Package global model variables in one object
-    let g = Globals {
+    val g = Globals {
         lambda   = lambda,
         mu       = mu,
         sigma    = sigma,
@@ -257,7 +257,7 @@ model function bdd2(tree: Tree, rho: Real, numIntervals: Int) => Real[] {
     walk(g, 1.0, tree.age, tree.right);
 
     // Condition on MRCA detection
-    let m = numTrialsUntilMRCADetection(g, tree.age, 1000);
+    val m = numTrialsUntilMRCADetection(g, tree.age, 1000);
     weight int2real(m);
     resample;
 

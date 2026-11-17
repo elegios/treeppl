@@ -33,10 +33,10 @@ function uniformLogPdf(x: Real, a: Real, b: Real) => Real {
  * Node repertoire debt
  */ 
 function mtx3ToSeq(mtx: Matrix[Real], i: Int ) => Real[] {
-  let p1 = mtxGet(i, 1, mtx); 
-  let p2 = mtxGet(i, 2, mtx); 
-  let p3 = mtxGet(i, 3, mtx); 
-  let s = p1 + p2 + p3;
+  val p1 = mtxGet(i, 1, mtx); 
+  val p2 = mtxGet(i, 2, mtx); 
+  val p3 = mtxGet(i, 3, mtx); 
+  val s = p1 + p2 + p3;
   return [p1 / s, p2 / s, p3 / s];
 }
 
@@ -44,7 +44,7 @@ function getRepertoireDebt(x: Int[], samplingProb: Matrix[Real], nhosts: Int) =>
   // Accumulate the total log probability of sampling this repertoire
   return fold(
     function(acc: Real, i: Int) => Real {
-      let param = mtx3ToSeq(samplingProb, i);
+      val param = mtx3ToSeq(samplingProb, i);
       return acc + categoricalLogPdf(x[i], param);
     },
     0.0,

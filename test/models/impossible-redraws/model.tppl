@@ -2,7 +2,7 @@
 
 model function mwe() => Int {
   assume a ~ Bernoulli(0.5);
-  let bProb = getProb(a);
+  val bProb = getProb(a);
   assume b ~ Bernoulli(bProb);
   return bool2int(a) + 2 * bool2int(b);
 }

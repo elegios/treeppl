@@ -41,9 +41,9 @@ function numTrialsUntilMRCADetection(g: Globals, d: Dists, tRoot: Real, mMax: In
         return 0;
     }
 
-    let ret = isDetected(g, d, 1.0, tRoot);
+    val ret = isDetected(g, d, 1.0, tRoot);
     if (ret.detected) {
-        let ret = isDetected(g, ret.d, 1.0, tRoot);
+        val ret = isDetected(g, ret.d, 1.0, tRoot);
         if (ret.detected) {
             return 1;       // We are detected, terminate
         }
@@ -56,17 +56,17 @@ function numTrialsUntilMRCADetection(g: Globals, d: Dists, tRoot: Real, mMax: In
 // Forward simulation determining whether a tree survives and is detected (sampled)
 function isDetected(g: Globals, d: Dists, multiplier: Real, tBegin: Real) => DistsBool {
 
-    let ret1 = drawNormalInverseGammaNormal(d.nigdist);
-    let multiplier = exp(ret1.rv) * multiplier;
+    val ret1 = drawNormalInverseGammaNormal(d.nigdist);
+    val multiplier = exp(ret1.rv) * multiplier;
     if (multiplier > 1e4) {
         return DistsBool { d=Dists{nigdist=ret1.nigdist, gdist=d.gdist}, detected=true };
     }
-    let multiplier = max(multiplier,1e-6);
+    val multiplier = max(multiplier,1e-6);
 
-    let ret2 = drawGammaExponential(d.gdist, multiplier*(1.0 + g.epsilon));
-    let newTime = tBegin - ret2.rv;
+    val ret2 = drawGammaExponential(d.gdist, multiplier*(1.0 + g.epsilon));
+    val newTime = tBegin - ret2.rv;
 
-    let d = Dists {
+    val d = Dists {
                 nigdist    = ret1.nigdist,
                 gdist      = ret2.gdist
             };
@@ -82,7 +82,7 @@ function isDetected(g: Globals, d: Dists, multiplier: Real, tBegin: Real) => Dis
     assume isSpeciation ~ Bernoulli(1.0 / (1.0 + g.epsilon));
 
     if (isSpeciation) {
-        let ret = isDetected(g, d, multiplier, newTime);
+        val ret = isDetected(g, d, multiplier, newTime);
         if (ret.detected) {
             return ret;
         }
@@ -99,8 +99,8 @@ function isDetected(g: Globals, d: Dists, multiplier: Real, tBegin: Real) => Dis
 // Simulate hidden speciation along an observed branch
 function simHiddenSpeciation(g: Globals, d: Dists, multiplier: Real, startTime: Real, endTime: Real) => Params {
 
-    let ret1 = drawNormalInverseGammaNormal(d.nigdist);
-    let multiplier = exp(ret1.rv) * multiplier;
+    val ret1 = drawNormalInverseGammaNormal(d.nigdist);
+    val multiplier = exp(ret1.rv) * multiplier;
     if (multiplier > 1e4) {
         weight 0.0;
         return Params {
@@ -108,26 +108,26 @@ function simHiddenSpeciation(g: Globals, d: Dists, multiplier: Real, startTime: 
             multiplier = multiplier
         };
     }
-    let multiplier = max(multiplier,1e-6);
+    val multiplier = max(multiplier,1e-6);
 
-    let ret2 = drawGammaExponential(d.gdist, multiplier);
-    let newTime = startTime - ret2.rv;
+    val ret2 = drawGammaExponential(d.gdist, multiplier);
+    val newTime = startTime - ret2.rv;
 
-    let d = Dists {
+    val d = Dists {
                 nigdist    = ret1.nigdist,
                 gdist      = ret2.gdist
             };
 
     // Handle speciation before end of branch
     if (newTime > endTime) {
-        let ret = isDetected(g, d, multiplier, newTime);
+        val ret = isDetected(g, d, multiplier, newTime);
         if (ret.detected) {
             weight 0.0;
             return Params{ d = ret.d, multiplier = multiplier };
         }
         weight 2.0;
-        let gdist = observeGammaPoisson(0, ret.d.gdist, multiplier*g.epsilon*ret2.rv);
-        let d = Dists {
+        val gdist = observeGammaPoisson(0, ret.d.gdist, multiplier*g.epsilon*ret2.rv);
+        val d = Dists {
             nigdist     = d.nigdist,
             gdist       = gdist
         };
@@ -135,8 +135,8 @@ function simHiddenSpeciation(g: Globals, d: Dists, multiplier: Real, startTime: 
     }
 
     // Passed the end, we are done
-    let gdist = observeGammaPoisson(0, d.gdist, multiplier*g.epsilon*(startTime - endTime));
-    let d = Dists {
+    val gdist = observeGammaPoisson(0, d.gdist, multiplier*g.epsilon*(startTime - endTime));
+    val d = Dists {
         nigdist = d.nigdist,
         gdist   = gdist
     };
@@ -149,17 +149,17 @@ function simHiddenSpeciation(g: Globals, d: Dists, multiplier: Real, startTime: 
 // Simulate process along the observed tree
 function walk(g: Globals, d: Dists, multiplier: Real, parentAge: Real, node: Tree) => Dists {
 
-    let nodeAge = node.age;
-    let p = simHiddenSpeciation(g, d, multiplier, parentAge, nodeAge);
+    val nodeAge = node.age;
+    val p = simHiddenSpeciation(g, d, multiplier, parentAge, nodeAge);
 
     if (node is Node) {
-        let gdist = observeGammaExponential(0.0, p.d.gdist, p.multiplier);
+        val gdist = observeGammaExponential(0.0, p.d.gdist, p.multiplier);
         resample;
-        let d = Dists {
+        val d = Dists {
                     nigdist     = p.d.nigdist,
                     gdist       = gdist
                 };
-        let d = walk(g, d, p.multiplier, nodeAge, node.left);
+        val d = walk(g, d, p.multiplier, nodeAge, node.left);
         return  walk(g, d, p.multiplier, nodeAge, node.right);
     } else {
         observe true ~ Bernoulli(g.rho);
@@ -173,31 +173,31 @@ model function clads2(tree: Tree, rho: Real) => Real[] {
 
     // Set priors such that net diversification (lambda - mu) is likely
     // to generate a tree of the observed size.
-    let numLeaves = int2real(countLeaves(tree));
-    let expectedTotalLeaves = numLeaves / rho;
-    let meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
+    val numLeaves = int2real(countLeaves(tree));
+    val expectedTotalLeaves = numLeaves / rho;
+    val meanLambdaPrior = 2.0 * log(expectedTotalLeaves) / tree.age;
 
     // Define the priors
-    let gdist = GammaDist {
+    val gdist = GammaDist {
         alpha = 1.0,
         beta  = 1.0/meanLambdaPrior
     };
 
-    let nigdist = NormalInverseGammaDist {
+    val nigdist = NormalInverseGammaDist {
         mu0    = 0.0,
         lambda = 1.0,
         alpha  = 1.0,
         beta   = 0.2
     };
 
-    let d = Dists {
+    val d = Dists {
         gdist   = gdist,
         nigdist = nigdist
     };
 
     assume epsilon ~ Uniform(0.0,1.0)               drift Uniform(max(epsilon-0.05,0.0),min(epsilon+0.05,1.0));
 
-    let g = Globals {
+    val g = Globals {
         epsilon = epsilon,
         rho     = rho
     };
@@ -207,18 +207,18 @@ model function clads2(tree: Tree, rho: Real) => Real[] {
     logWeight ((log(2.0) * (numLeaves - 1.0)) - logFactorial(numLeaves));
 
     // Simulate conditional on the observed tree
-    let d = walk(g, d, 1.0, tree.age, tree.left);
-    let d = walk(g, d, 1.0, tree.age, tree.right);
+    val d = walk(g, d, 1.0, tree.age, tree.left);
+    val d = walk(g, d, 1.0, tree.age, tree.right);
 
     // Estimate effect of conditioning on survival
-    let m = numTrialsUntilMRCADetection(g, d, tree.age, 1000);
+    val m = numTrialsUntilMRCADetection(g, d, tree.age, 1000);
     weight int2real(m);
     resample;
 
-    let lambda   = d.gdist.alpha/d.gdist.beta;
-    let mu       = g.epsilon*lambda;
-    let logAlpha = d.nigdist.mu0;
-    let sigma    = sqrt(d.nigdist.beta/((d.nigdist.alpha-1.0)*d.nigdist.lambda));
+    val lambda   = d.gdist.alpha/d.gdist.beta;
+    val mu       = g.epsilon*lambda;
+    val logAlpha = d.nigdist.mu0;
+    val sigma    = sqrt(d.nigdist.beta/((d.nigdist.alpha-1.0)*d.nigdist.lambda));
 
     return [lambda, mu, logAlpha, sigma, int2real(m)];
 }

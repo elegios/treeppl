@@ -74,14 +74,14 @@ function lomaxRv(alpha: Real, lambda: Real) => Real {
     assume u ~ Uniform(0.0,1.0);
 
     // Applying inverse CDF
-    let x = lambda*((u^(-1.0/alpha)) - 1.0);
+    val x = lambda*((u^(-1.0/alpha)) - 1.0);
 
     return x;
 }
 
 function observeGammaExponential(x: Real, gdist: GammaDist, multiplier: Real) => GammaDist {
 
-    let x = x*multiplier;
+    val x = x*multiplier;
 
     logWeight lomaxLogPDF(x, gdist.alpha, gdist.beta) + log(multiplier);
 
@@ -93,7 +93,7 @@ function observeGammaExponential(x: Real, gdist: GammaDist, multiplier: Real) =>
 
 function drawGammaExponential(gdist: GammaDist, multiplier: Real) => GammaExpDraw {
 
-    let x = lomaxRv(gdist.alpha, gdist.beta);
+    val x = lomaxRv(gdist.alpha, gdist.beta);
 
     return GammaExpDraw {
         gdist = GammaDist {
@@ -106,13 +106,13 @@ function drawGammaExponential(gdist: GammaDist, multiplier: Real) => GammaExpDra
 
 function negbinomialLogPMF(x: Int, r: Real, p: Real) => Real {
 
-    let k = int2real(x);
+    val k = int2real(x);
     return lnGamma(k+r-1.0) - lnGamma(r-1.0) - lnGamma(k) + k*log(1.0-p) + r*log(p);
 }
 
 function negbinomialRv(r: Real, p: Real) => Int {
 
-    let theta = (1.0-p)/p;
+    val theta = (1.0-p)/p;
     assume lambda ~ Gamma(r, theta);
     assume x ~ Poisson(lambda);
 
@@ -121,7 +121,7 @@ function negbinomialRv(r: Real, p: Real) => Int {
 
 function observeGammaPoisson(x: Int, gdist: GammaDist, multiplier: Real) => GammaDist {
 
-    let p = gdist.beta/(gdist.beta + multiplier);
+    val p = gdist.beta/(gdist.beta + multiplier);
     logWeight negbinomialLogPMF(x, gdist.alpha, p);
 
     return GammaDist {
@@ -132,8 +132,8 @@ function observeGammaPoisson(x: Int, gdist: GammaDist, multiplier: Real) => Gamm
 
 function drawGammaPoisson(gdist: GammaDist, multiplier: Real) => GammaPoissonDraw {
 
-    let p = gdist.beta/(gdist.beta + multiplier);
-    let x = negbinomialRv(gdist.alpha, p);
+    val p = gdist.beta/(gdist.beta + multiplier);
+    val x = negbinomialRv(gdist.alpha, p);
 
     return GammaPoissonDraw {
         gdist = GammaDist {
@@ -146,22 +146,22 @@ function drawGammaPoisson(gdist: GammaDist, multiplier: Real) => GammaPoissonDra
 
 function drawNormalInverseGammaNormal(nig: NormalInverseGammaDist) => NormalInverseGammaNormalDraw {
 
-    let k = 2.0*nig.alpha;
-    let v = 2.0*nig.beta*(1.0 + (1.0/nig.lambda));
+    val k = 2.0*nig.alpha;
+    val v = 2.0*nig.beta*(1.0 + (1.0/nig.lambda));
     assume u1 ~ Normal(0.0, sqrt(v/k));
     assume u2 ~ Gamma(k/2.0,2.0);   // Chi-square is the same as this Gamma distribution, also works for noninteger k
 
-    let value = nig.mu0 + u1/sqrt(u2/k);
-    let z = value - nig.mu0;
+    val value = nig.mu0 + u1/sqrt(u2/k);
+    val z = value - nig.mu0;
 
 //    Alternative derivation, from Student t to the distribution we want
 //    (mathematically identical, is it less numerically stable or slower?)
-//    let k = 2.0*nig.alpha;
+//    val k = 2.0*nig.alpha;
 //    assume u1 ~ Normal(0,1);
 //    assume u2 ~ Chi2(round(k));
-//    let value = nig.mu0 + u1*sqrt(k/u2)*sqrt(nig.beta*(1.0+1.0/nig.lambda)/nig.alpha));
+//    val value = nig.mu0 + u1*sqrt(k/u2)*sqrt(nig.beta*(1.0+1.0/nig.lambda)/nig.alpha));
 
-    let nig = NormalInverseGammaDist {
+    val nig = NormalInverseGammaDist {
         alpha  = 0.5 + nig.alpha,
         beta   = nig.beta + 0.5*(nig.lambda/(1.0+nig.lambda))*z*z,
         mu0    = (nig.mu0*nig.lambda + value)/(1.0+nig.lambda),

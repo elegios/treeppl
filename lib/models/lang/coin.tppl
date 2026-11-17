@@ -28,10 +28,10 @@ function flip(datapoint: Bool, probability: Real) {
 model function coinModel(coinflips: Bool[]) => Real  {
   // Uncomment if you want to test the input
   //printLn("Input:");
-  //let coinStr = apply(bool2string, coinflips);
+  //val coinStr = apply(bool2string, coinflips);
   //printLn(join(coinStr));
   assume p ~ Beta(2.0, 2.0); // prior
-  let n = length(coinflips);
+  val n = length(coinflips);
   for i in 1 to n {
     flip(coinflips[i], p); // likelihood
   }

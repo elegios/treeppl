@@ -8,11 +8,11 @@ function independenceLikelihood(
   eventSeqs: Event[][],
   modelParams: ModelParams
 ) => Real {
-  let unconditional = fold(
+  val unconditional = fold(
     function(acc: Real, h: Int) => Real {
-      let eventSeq = eventSeqs[h];
-      let fromState = fromRep[h];
-      let toState = toRep[h];
+      val eventSeq = eventSeqs[h];
+      val fromState = fromRep[h];
+      val toState = toRep[h];
       return acc + hostIndepLikelihood(
         1,
         fromState,
@@ -40,7 +40,7 @@ function independenceLikelihoodEndCond(
 ) => Real {
   // If the CTMC samle is x(.) then the below computes 
   //      P[X(.) = x(.), X(T) = b | X(0) = a]
-  let unconditional = independenceLikelihood(
+  val unconditional = independenceLikelihood(
    fromRep,
     toRep,
     fromAge,
@@ -49,8 +49,8 @@ function independenceLikelihoodEndCond(
     modelParams
   );
   // For correct weights we need to compute P[X(T) = b | X(0) = a]
-  let logTotalTransProb = fold(
-    function(acc: Real, val: Real) => Real { return acc + val; },
+  val logTotalTransProb = fold(
+    function(acc: Real, x: Real) => Real { return acc + x; },
     0.0,
     zipWith(
       function(fromState: Int, toState: Int) => Real {
@@ -61,7 +61,7 @@ function independenceLikelihoodEndCond(
     )
   );
   // The weight of the branch sample is P[X(.) = x(.) | X(0) = a, X(T) = b]
-  let conditional = unconditional - logTotalTransProb;
+  val conditional = unconditional - logTotalTransProb;
   return conditional;
 }
 
@@ -75,16 +75,16 @@ function hostIndepLikelihood(
   embeddedQMatrix: EmbeddedMarkovChainMatrix
 ) => Real {
   if nextIndex > length(eventSeq) {
-    let timePassed = currAge - finalAge;
-    let outRate = embeddedQMatrix.totalRates[currState + 1];
+    val timePassed = currAge - finalAge;
+    val outRate = embeddedQMatrix.totalRates[currState + 1];
     return -timePassed * outRate;
   } else {
-    let nextEvent = eventSeq[nextIndex];
-    let nextState = nextEvent.toState;
-    let nextAge = nextEvent.eventTime;
-    let timePassed = currAge - nextAge;
-    let outRate = embeddedQMatrix.totalRates[currState + 1];
-    let transProb = embeddedQMatrix.transitionProbs[currState + 1][nextState + 1];
+    val nextEvent = eventSeq[nextIndex];
+    val nextState = nextEvent.toState;
+    val nextAge = nextEvent.eventTime;
+    val timePassed = currAge - nextAge;
+    val outRate = embeddedQMatrix.totalRates[currState + 1];
+    val transProb = embeddedQMatrix.transitionProbs[currState + 1][nextState + 1];
     return log(transProb) - timePassed * outRate + hostIndepLikelihood(
       nextIndex + 1,
       nextState,

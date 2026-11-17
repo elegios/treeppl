@@ -123,16 +123,16 @@ model function qtbirds( tree: QTTree
   assume lam ~ Gamma(lamShape, lamScale);
   assume mu ~ Gamma(muShape, muScale);
   assume nu ~ Gamma(nuShape, nuScale); // comment this ...
-  let p = 0.0;                         // and this and ...
+  val p = 0.0;                         // and this and ...
 
   // and uncomment the following lines, if you want nu to be a mix between
   // 0 and gamma
   //assume p ~ Beta(pa, pb);
   //assume rho ~ Bernoulli(p);
-  //let nu = gammaZeroMix(rho, nuShape, nuScale);
+  //val nu = gammaZeroMix(rho, nuShape, nuScale);
 
   // $* scalar multiplication
-  let m = ModelDynamics { qChar = lam $* normQChar
+  val m = ModelDynamics { qChar = lam $* normQChar
                         , jChar = jChar
                         , charMessages = charMessages
                         , qMol = mu $* normQMol
@@ -140,7 +140,7 @@ model function qtbirds( tree: QTTree
                         , nu = nu
                         };
 
-  let something = coalesceQTTree(tree, m, false); // Outermost call, so no need to resample
+  val something = coalesceQTTree(tree, m, false); // Outermost call, so no need to resample
 
   return [lam, mu, nu, p];
 }
@@ -164,7 +164,7 @@ model function qtbirds( tree: QTTree
  */
 function coalesceQTTree(tree: QTTree, m: ModelDynamics, doresample: Bool) => QTTree {
   if (tree.left is QTLeaf) && (tree.right is QTLeaf) {
-    let newTree = QTWeightedNode  { left = tree.left
+    val newTree = QTWeightedNode  { left = tree.left
                                   , right = tree.right
                                   , age = tree.age
                                   , partialLogWeight = 0.0
@@ -172,8 +172,8 @@ function coalesceQTTree(tree: QTTree, m: ModelDynamics, doresample: Bool) => QTT
     return coalesceQTTwig(newTree, m, doresample);
   }
   if (tree.left is QTLeaf) && (tree.right is QTNode) {
-    let rightTree = coalesceQTTree(tree.right, m, true); // matches QTWeightedLeaf, resample in the inner calls
-    let newTree = QTWeightedNode  { left = tree.left
+    val rightTree = coalesceQTTree(tree.right, m, true); // matches QTWeightedLeaf, resample in the inner calls
+    val newTree = QTWeightedNode  { left = tree.left
                                   , right = rightTree
                                   , age = tree.age
                                   , partialLogWeight = rightTree.partialLogWeight
@@ -181,8 +181,8 @@ function coalesceQTTree(tree: QTTree, m: ModelDynamics, doresample: Bool) => QTT
     return coalesceQTTwig(newTree, m, doresample);
   }
   if (tree.left is QTNode) && (tree.right is QTLeaf) {
-    let leftTree = coalesceQTTree(tree.left, m, true); // matches QTWeightedLeaf, resample in the inner calls
-    let newTree = QTWeightedNode  { left = leftTree
+    val leftTree = coalesceQTTree(tree.left, m, true); // matches QTWeightedLeaf, resample in the inner calls
+    val newTree = QTWeightedNode  { left = leftTree
                                   , right = tree.right
                                   , age = tree.age
                                   , partialLogWeight = leftTree.partialLogWeight
@@ -190,9 +190,9 @@ function coalesceQTTree(tree: QTTree, m: ModelDynamics, doresample: Bool) => QTT
     return coalesceQTTwig(newTree, m, doresample);
   }
   if (tree.left is QTNode) && (tree.right is QTNode) {
-    let leftTree = coalesceQTTree(tree.left, m, true); // matches QTWeightedLeaf, resample in the inner calls
-    let rightTree = coalesceQTTree(tree.right, m, true); // matches QTWeightedLeaf, resample in the inner calls
-    let newTree = QTWeightedNode  { left = leftTree
+    val leftTree = coalesceQTTree(tree.left, m, true); // matches QTWeightedLeaf, resample in the inner calls
+    val rightTree = coalesceQTTree(tree.right, m, true); // matches QTWeightedLeaf, resample in the inner calls
+    val newTree = QTWeightedNode  { left = leftTree
                                   , right = rightTree
                                   , age = tree.age
                                   , partialLogWeight = leftTree.partialLogWeight + rightTree.partialLogWeight
@@ -202,7 +202,7 @@ function coalesceQTTree(tree: QTTree, m: ModelDynamics, doresample: Bool) => QTT
   else {
     printLn("Error (coalesceQTTree): unexpected tree structure");
     weight 0.0;
-    let errorTree = QTWeightedNode { left = tree.left
+    val errorTree = QTWeightedNode { left = tree.left
                           , right = tree.right
                           , age = tree.age
                           , partialLogWeight = log(0.0) // -Inf??
@@ -217,56 +217,56 @@ function coalesceQTTree(tree: QTTree, m: ModelDynamics, doresample: Bool) => QTT
  * (they can be weighted or unweighted)
  */
 function coalesceQTTwig(tree: QTTree, m: ModelDynamics, doresample: Bool) => QTTree {
-  let leftTime = getAgeDiff(tree, tree.left);
-  let rightTime = getAgeDiff(tree, tree.right);
+  val leftTime = getAgeDiff(tree, tree.left);
+  val rightTime = getAgeDiff(tree, tree.right);
 
-  let leftMessageSequence = getMessageSequence(tree.left);
-  let rightMessageSequence = getMessageSequence(tree.right);
+  val leftMessageSequence = getMessageSequence(tree.left);
+  val rightMessageSequence = getMessageSequence(tree.right);
 
-  let leftCharacterMessage = getCharacterMessage(tree.left, m.charMessages);
-  let rightCharacterMessage = getCharacterMessage(tree.right, m.charMessages);
+  val leftCharacterMessage = getCharacterMessage(tree.left, m.charMessages);
+  val rightCharacterMessage = getCharacterMessage(tree.right, m.charMessages);
 
-  let leftMessageSequenceEvolution = evolveMessageSequence(leftMessageSequence, m, leftTime);
-  let newLeftMessageSequence = leftMessageSequenceEvolution.messageSequence;  // should work now
+  val leftMessageSequenceEvolution = evolveMessageSequence(leftMessageSequence, m, leftTime);
+  val newLeftMessageSequence = leftMessageSequenceEvolution.messageSequence;  // should work now
   // ... jumps leftMessageSequenceEvolution.characterJumps
   // if not, workaround below:
-  ///let newLeftMessageSequence = sapply(leftMessageSequenceEvolution.messageSequence, idTensorReal);     // workaround
+  ///val newLeftMessageSequence = sapply(leftMessageSequenceEvolution.messageSequence, idTensorReal);     // workaround
 
 
-  let rightMessageSequenceEvolution = evolveMessageSequence(rightMessageSequence, m, rightTime);
-  let newRightMessageSequence = rightMessageSequenceEvolution.messageSequence; // should work now
+  val rightMessageSequenceEvolution = evolveMessageSequence(rightMessageSequence, m, rightTime);
+  val newRightMessageSequence = rightMessageSequenceEvolution.messageSequence; // should work now
   // ... jumps rightMessageSequenceEvolution.characterJumps
   // if not, workaround
-  //let newRightMessageSequence = sapply(rightMessageSequenceEvolution.messageSequence, idTensorReal);
+  //val newRightMessageSequence = sapply(rightMessageSequenceEvolution.messageSequence, idTensorReal);
 
 
   // we need to zipWith left and right and element-wise multiply left and right
   // TODO one of the messages may be missing (-1.)
-  let newMessageSequence = zipWith( mtxElemMulMissing
+  val newMessageSequence = zipWith( mtxElemMulMissing
                                   , newLeftMessageSequence
                                   , newRightMessageSequence
                                   ); // ~~TODO check zipWith and implement hadamardMul~~
 
   //  Still possible to have missing data after the previous operation
   // computeMessageLogLikelihood takes this account
-  let logWeightSequence = sapply(newMessageSequence, computeMessageLogLikelihood);
+  val logWeightSequence = sapply(newMessageSequence, computeMessageLogLikelihood);
 
-  let newLeftCharMessage = evolveCharacter( leftCharacterMessage
+  val newLeftCharMessage = evolveCharacter( leftCharacterMessage
                                           , m
                                           , leftTime
                                           , leftMessageSequenceEvolution.characterJumps
                                           );
 
-  let newRightCharMessage = evolveCharacter ( rightCharacterMessage
+  val newRightCharMessage = evolveCharacter ( rightCharacterMessage
                                             , m
                                             , rightTime
                                             , rightMessageSequenceEvolution.characterJumps
                                             );
 
-  let newCharMessage = mtxElemMul(newLeftCharMessage, newRightCharMessage); // characters are never missing :)
-  let logWeightChar = computeMessageLogLikelihood(newCharMessage);
+  val newCharMessage = mtxElemMul(newLeftCharMessage, newRightCharMessage); // characters are never missing :)
+  val logWeightChar = computeMessageLogLikelihood(newCharMessage);
 
-  let partialLogWeight = seqSumReal(logWeightSequence) + logWeightChar;
+  val partialLogWeight = seqSumReal(logWeightSequence) + logWeightChar;
 
   logWeight (partialLogWeight - tree.partialLogWeight);
 
@@ -289,7 +289,7 @@ function coalesceQTTwig(tree: QTTree, m: ModelDynamics, doresample: Bool) => QTT
     resample;
   }
 
-  let newTree = QTWeightedLeaf  { age = tree.age
+  val newTree = QTWeightedLeaf  { age = tree.age
                                 , messageSequence = newMessageSequence
                                 , characterMessage = newCharMessage
                                 , partialLogWeight = partialLogWeight
@@ -303,10 +303,10 @@ function getMessageSequence(tree: QTTree) => Matrix[Real][] {
     return sapply(tree.stateSequence, getMessage);
   }
   if (tree is QTWeightedLeaf) {
-    let mesSeq = tree.messageSequence; // should work now
+    val mesSeq = tree.messageSequence; // should work now
     // workaround reconstruct sequence
-    //let mesSeq = sapply(tree.messageSequence, idTensorReal);
-    //let mesSeq = idSTensorReal(tree.messageSequence); // used to be a workaround
+    //val mesSeq = sapply(tree.messageSequence, idTensorReal);
+    //val mesSeq = idSTensorReal(tree.messageSequence); // used to be a workaround
     return mesSeq;
   }
   else {
@@ -326,7 +326,7 @@ function getMessage(state: Int) => Matrix[Real] {
     return rvecCreate(4, [-1., -1., -1., -1.]);  // for now this is how we encode missing data
   }
 
-  let messages = [[1., 0., 0., 0.],    // 0
+  val messages = [[1., 0., 0., 0.],    // 0
                   [0., 1., 0., 0.],    // 1
                   [0., 0., 1., 0.],    // 2
                   [0., 0., 0., 1.]];   // 3
@@ -339,9 +339,9 @@ function getCharacterMessage(tree: QTTree, messages: Real[][]) => Matrix[Real]
 {
   if (tree is QTLeaf)
   {
-    let l = length(messages);
-    let curState = idInt(tree.characterState); // workaround
-    let rTensor = rvecCreate(l, messages[1 + curState]);
+    val l = length(messages);
+    val curState = idInt(tree.characterState); // workaround
+    val rTensor = rvecCreate(l, messages[1 + curState]);
     return rTensor;
   }
 
@@ -391,14 +391,14 @@ function evolveMessageClosure( dyn: ModelDynamics
 {
   assume sJumps ~ Poisson(dyn.nu * t * u); // divided by number of nucleotides
   // Missing data case
-  let myScalar = mtxGet(1, 1, mes);
+  val myScalar = mtxGet(1, 1, mes);
   if (myScalar < 0.) { // we will skip the linear algebra if the message is missing
     return MessageEvolution {
       message = mes,
       sJumps = sJumps
     };
   }
-  let res = mes *@ ( mtxPow(dyn.jMol, sJumps) *@ (mtxExp(dyn.qMol *$ t)));
+  val res = mes *@ ( mtxPow(dyn.jMol, sJumps) *@ (mtxExp(dyn.qMol *$ t)));
   // TODO do something for operator precedence to avoid so many parens
   return MessageEvolution {
     message = res,
@@ -410,7 +410,7 @@ function evolveMessageClosure( dyn: ModelDynamics
 function evolveCharacter(mes: Matrix[Real], m: ModelDynamics, t: Real, sJumps: Int) => Matrix[Real]
 {
   // TODO on top of that we need to add the s-jumps
-  let res = mes *@ (mtxPow(m.jChar, sJumps) *@ mtxExp(m.qChar *$ t) );
+  val res = mes *@ (mtxPow(m.jChar, sJumps) *@ mtxExp(m.qChar *$ t) );
   return res;
 }
 
@@ -429,9 +429,9 @@ function evolveMessageSequence( messages: Matrix[Real][]
                               , t: Real
                               ) => MessageSequenceEvolution
 {
-  let u = 1.0/Real(length(messages));
-  let evolveMessage = function(x : Matrix[Real]) => MessageEvolution {return evolveMessageClosure(m, t, u, x);}; // partial application
-  let ret = sapply(messages, evolveMessage);
+  val u = 1.0/Real(length(messages));
+  val evolveMessage = function(x : Matrix[Real]) => MessageEvolution {return evolveMessageClosure(m, t, u, x);}; // partial application
+  val ret = sapply(messages, evolveMessage);
 
   return MessageSequenceEvolution {
     messageSequence = sapply(ret, meGetMessage),  // workaround, projecting from res with explictly defined functions, but would be better with anonymous functions
@@ -452,11 +452,11 @@ function computeMessageLogLikelihood(mes: Matrix[Real]) => Real
   }
   // TODO incorporate equilibrium probabilities in this computation
   // TODO write tests
-  let l = dim(mes)[2];
-  let base = rep(l, 1.0);
-  let cvec = cvecCreate(l, base);
-  let msum = mes *@ cvec; // msum is now a 1x1 vector
-  let msumReal = mtxGet(1, 1, msum);
+  val l = dim(mes)[2];
+  val base = rep(l, 1.0);
+  val cvec = cvecCreate(l, base);
+  val msum = mes *@ cvec; // msum is now a 1x1 vector
+  val msumReal = mtxGet(1, 1, msum);
   return log(msumReal);
 }
 

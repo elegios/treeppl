@@ -24,56 +24,56 @@ model function rejectAccept(
   assume mu ~ Exponential(10.) drift rbMuMove(mu);
   assume beta ~ Exponential(1.) drift rbBetaMove(beta);
 
-  let r = mtxCreate(3,3,
+  val r = mtxCreate(3,3,
     [0.-lambda[1],                lambda[1],          0.0,
         lambda[2], 0.-(lambda[2]+lambda[3]),    lambda[3],
               0.0,                lambda[4], 0.-lambda[4]]
   );
-  let qMatrix = mtxSclrMul(mu, r);
+  val qMatrix = mtxSclrMul(mu, r);
 
 
-  let nestedInteractions = nestSeq(interactions, ntips, nhosts);
-  let postorderTree = postorderTraverse(symbiont_tree, qMatrix, nestedInteractions, nhosts);
+  val nestedInteractions = nestSeq(interactions, ntips, nhosts);
+  val postorderTree = postorderTraverse(symbiont_tree, qMatrix, nestedInteractions, nhosts);
 
   // Sample the root. We assume in both the independence and full model
   // that we have a flat prior on the root
-  let rootPrior = mtxCreate(nhosts, 3, ones(3 * nhosts));
-  let rootSamplingProb = mtxElemMul(postorderTree.outMsg, rootPrior);
-  let initRootRep = suggestRepAligned(rootSamplingProb, 1, nhosts);
-  let rootRep = suggestRepRS(rootSamplingProb, nhosts, initRootRep, 0);
+  val rootPrior = mtxCreate(nhosts, 3, ones(3 * nhosts));
+  val rootSamplingProb = mtxElemMul(postorderTree.outMsg, rootPrior);
+  val initRootRep = suggestRepAligned(rootSamplingProb, 1, nhosts);
+  val rootRep = suggestRepRS(rootSamplingProb, nhosts, initRootRep, 0);
 
   // Calculate the debt and excess
-  let rootLogDebt = getRepertoireDebt(rootRep, rootSamplingProb, nhosts);
-  let rootLogExcess = -log((3.^(Real(nhosts))) - (2.^Real(nhosts)));
+  val rootLogDebt = getRepertoireDebt(rootRep, rootSamplingProb, nhosts);
+  val rootLogExcess = -log((3.^(Real(nhosts))) - (2.^Real(nhosts)));
 
   // This is an aligned point so we can weight by the importance ratio
   logWeight rootLogExcess - rootLogDebt;
 
   // Compute messages to pass to pass to the children of the root
-  let newMsg = mtxCreate(nhosts, 3, observationMessage(rootRep, 1, nhosts));
-  let leftMsg = mtxMul(newMsg, postorderTree.leftKernel);
-  let rightMsg = mtxMul(newMsg, postorderTree.rightKernel);
+  val newMsg = mtxCreate(nhosts, 3, observationMessage(rootRep, 1, nhosts));
+  val leftMsg = mtxMul(newMsg, postorderTree.leftKernel);
+  val rightMsg = mtxMul(newMsg, postorderTree.rightKernel);
 
   // Construct an object containing the rate matrix in a suitable format for sampling 
   // from the embedded Markov chain
 
-  let embeddedQMatrix = rateMatrixToEmbeddedMarkovChain(qMatrix);
-  let modelParams = ModelParams {
+  val embeddedQMatrix = rateMatrixToEmbeddedMarkovChain(qMatrix);
+  val modelParams = ModelParams {
     beta = beta,
     hostMetric = mtxCreate(nhosts, nhosts, host_distances),
     embeddedQMatrix = embeddedQMatrix,
     meanDist = dMean
   };
-  let rootAge = postorderTree.age;
-  let leftRepertoireTree = sampleTreeHistory(
+  val rootAge = postorderTree.age;
+  val leftRepertoireTree = sampleTreeHistory(
     postorderTree.left, nhosts, leftMsg, rootRep, rootAge, modelParams, postorderTree.leftKernel
   );
-  let rightRepertoireTree = sampleTreeHistory(
+  val rightRepertoireTree = sampleTreeHistory(
     postorderTree.right, nhosts, rightMsg, rootRep, rootAge, modelParams, postorderTree.rightKernel
   );
 
   // Construct the root node of the repertoire tree
-  let historyTree = HistoryNode {
+  val historyTree = HistoryNode {
     age = symbiont_tree.age, label = symbiont_tree.label,
     left = leftRepertoireTree, right = rightRepertoireTree,
     repertoire = rootRep, history = []
@@ -88,7 +88,7 @@ model function rejectAccept(
 
 function suggestRepAligned(msg: Matrix[Real], i: Int, max: Int) => Int[] {
   if i <= max {
-    let param = mtx3ToSeq(msg, i);
+    val param = mtx3ToSeq(msg, i);
     assume x ~ Categorical(param) drift categoricalMove(x, param); 
     return cons(x, suggestRepAligned(msg, i + 1, max));
   } else {
@@ -97,12 +97,12 @@ function suggestRepAligned(msg: Matrix[Real], i: Int, max: Int) => Int[] {
 }
 
 function suggestRepRS(msg: Matrix[Real], max: Int, initialRep: Int[], depth: Int) => Int[] {
-  let _REP_REJECTION_DEPTH = 10;
+  val _REP_REJECTION_DEPTH = 10;
   if any(is2, initialRep) {
     return initialRep;
   } else {
     if depth < _REP_REJECTION_DEPTH {
-      let newRep = suggestRepUnaligned(msg, 1, max);
+      val newRep = suggestRepUnaligned(msg, 1, max);
       return suggestRepRS(msg, max, newRep, depth + 1);
     } else {
       // Set weight to zero and return dummy value
@@ -114,7 +114,7 @@ function suggestRepRS(msg: Matrix[Real], max: Int, initialRep: Int[], depth: Int
 
 function suggestRepUnaligned(msg: Matrix[Real], i: Int, max: Int) => Int[] {
   if i <= max {
-    let param = mtx3ToSeq(msg, i);
+    val param = mtx3ToSeq(msg, i);
     assume x ~ Categorical(param); 
     return paste0([[x], suggestRepUnaligned(msg, i + 1, max)]);
   } else {
@@ -133,9 +133,9 @@ function sampleTreeHistory(
 ) => HistoryTree {
   if tree is MsgLeaf {
     // We are at a leaf, so we don't need to sample the interactions
-    let rep = tree.interactions;
+    val rep = tree.interactions;
     // Sample the incident branch
-    let branchSample = sampleBranch(
+    val branchSample = sampleBranch(
       parentRep,
       rep,
       parentAge,
@@ -161,13 +161,13 @@ function sampleTreeHistory(
       history = branchSample.history
     };
   } else {
-    let samplingProb = mtxElemMul(tree.outMsg, preorderMsg);
-    let initRep = suggestRepAligned(samplingProb, 1, nhosts);
-    let rep = suggestRepRS(samplingProb, nhosts, initRep, 0);
-    let nodeLogDebt = getRepertoireDebt(rep, samplingProb, nhosts);
+    val samplingProb = mtxElemMul(tree.outMsg, preorderMsg);
+    val initRep = suggestRepAligned(samplingProb, 1, nhosts);
+    val rep = suggestRepRS(samplingProb, nhosts, initRep, 0);
+    val nodeLogDebt = getRepertoireDebt(rep, samplingProb, nhosts);
 
     // Sample the incident branch
-    let branchSample = sampleBranch(
+    val branchSample = sampleBranch(
       parentRep,
       rep,
       parentAge,
@@ -187,15 +187,15 @@ function sampleTreeHistory(
     }
 
     // Since we sampled a repertoire at the node we should propagate this information to the child nodes
-    let newMsg = mtxCreate(nhosts, 3, observationMessage(rep, 1, nhosts));
-    let leftMsg = mtxMul(newMsg, tree.leftKernel);
-    let rightMsg = mtxMul(newMsg, tree.rightKernel);
+    val newMsg = mtxCreate(nhosts, 3, observationMessage(rep, 1, nhosts));
+    val leftMsg = mtxMul(newMsg, tree.leftKernel);
+    val rightMsg = mtxMul(newMsg, tree.rightKernel);
 
     // Sample the two subtrees
-    let left = sampleTreeHistory(
+    val left = sampleTreeHistory(
       tree.left, nhosts, leftMsg, rep, tree.age, modelParams, tree.leftKernel
     );
-    let right = sampleTreeHistory(
+    val right = sampleTreeHistory(
       tree.right, nhosts, rightMsg, rep, tree.age, modelParams, tree.rightKernel
     );
 
@@ -220,30 +220,30 @@ function sampleBranch(
   branchKernel: Matrix[Real],
   rejectionDepth: Int
 ) => CorrectedBranchSample {
-  let _MAX_REJECTION_DEPTH_BRANCH = 100;
+  val _MAX_REJECTION_DEPTH_BRANCH = 100;
   if rejectionDepth <= _MAX_REJECTION_DEPTH_BRANCH {
     // Sample the events per host
-    let unorderedBranch = sampleUnorderedBranch(
+    val unorderedBranch = sampleUnorderedBranch(
       startRep, finalRep, startAge, finalAge, 1, nhosts, modelParams.embeddedQMatrix, 1
     );
     if unorderedBranch.success {
 
       // All host histories were sampled correctly,
       // compile the events for all hosts and sort them
-      let allHostEvents = paste0(unorderedBranch.history);
-      let orderedEvents = qSort(compAge, allHostEvents);
-      let nEvents = length(orderedEvents);
+      val allHostEvents = paste0(unorderedBranch.history);
+      val orderedEvents = qSort(compAge, allHostEvents);
+      val nEvents = length(orderedEvents);
       if allTimesValidBranch(startRep, orderedEvents, 1, nEvents, nhosts) {
         // The branch is correct along the full history, 
         // accept and calculate the true weight of the sample
         
         // Calculate the debt -- this is the density of the endpoint conditioned
         // (parallel) chains at the current sample. 
-        let logDebt = independenceLikelihoodEndCond(
+        val logDebt = independenceLikelihoodEndCond(
           startRep, finalRep, startAge, finalAge, unorderedBranch.history, modelParams, branchKernel
         );
         // Calculate the likelihood of the path under the full model
-        let logExcess = fullModelWeight(
+        val logExcess = fullModelWeight(
           1, startRep, finalRep, startAge, finalAge, orderedEvents, nEvents, nhosts, modelParams
         );
         // Return the branch sample with both the debt and the excess
@@ -302,14 +302,14 @@ function sampleUnorderedBranch(
   embeddedQMatrix: EmbeddedMarkovChainMatrix,
   rejectionDepth: Int
 ) => BranchSample {
-  let _MAX_REJECTION_DEPTH_HOST = 100;
+  val _MAX_REJECTION_DEPTH_HOST = 100;
   // Note that startAge > finalAge since the tree is moving forwards in time
   if hostIndex <= nhosts {
-    let hostHistory = sampleHostHistory(
+    val hostHistory = sampleHostHistory(
       startRep[hostIndex], finalRep[hostIndex], startAge, finalAge, hostIndex, embeddedQMatrix, 1
     );
     if hostHistory.success {
-      let otherHostHistories = sampleUnorderedBranch(
+      val otherHostHistories = sampleUnorderedBranch(
         startRep, finalRep, startAge, finalAge, hostIndex + 1, nhosts, embeddedQMatrix, 0
       );
       return BranchSample {
@@ -346,18 +346,18 @@ function sampleHostHistory(
   embeddedQMatrix: EmbeddedMarkovChainMatrix,
   stepIndex: Int
 ) => HostBranchSample {
-  let totalRate = embeddedQMatrix.totalRates[startState + 1];
+  val totalRate = embeddedQMatrix.totalRates[startState + 1];
   if startState != finalState && stepIndex == 1 {
     // If there is a mutation on the interval, sample the first event from a truncated exponential
 
-    let t = sampleTruncatedExponential(totalRate, startAge - finalAge);
-    let eventTime = startAge - t;
+    val t = sampleTruncatedExponential(totalRate, startAge - finalAge);
+    val eventTime = startAge - t;
 
     // Sample the next event
-    let nextState = sampleNextEvent(startState, embeddedQMatrix);
-    let param = embeddedQMatrix.transitionProbs[startState + 1];
+    val nextState = sampleNextEvent(startState, embeddedQMatrix);
+    val param = embeddedQMatrix.transitionProbs[startState + 1];
 
-    let restOfHistory = sampleHostHistory(nextState, finalState, eventTime, finalAge, host, embeddedQMatrix, stepIndex + 1);
+    val restOfHistory = sampleHostHistory(nextState, finalState, eventTime, finalAge, host, embeddedQMatrix, stepIndex + 1);
     return HostBranchSample {
       history = cons(
         Event { eventTime = eventTime, fromState = startState, toState = nextState, host = host },
@@ -386,13 +386,13 @@ function sampleHostHistory(
     } else {
 
       // Sample the next transition
-      let nextState = sampleNextEvent(startState, embeddedQMatrix);
-      let param = embeddedQMatrix.transitionProbs[startState + 1];
+      val nextState = sampleNextEvent(startState, embeddedQMatrix);
+      val param = embeddedQMatrix.transitionProbs[startState + 1];
       // assume nextState ~ Categorical(param);
 
       // Record the event time
-      let eventTime = startAge - t;
-      let restOfHistory = sampleHostHistory(nextState, finalState, eventTime, finalAge, host, embeddedQMatrix, stepIndex + 1);
+      val eventTime = startAge - t;
+      val restOfHistory = sampleHostHistory(nextState, finalState, eventTime, finalAge, host, embeddedQMatrix, stepIndex + 1);
       return HostBranchSample {
         history = cons(
           Event { eventTime = eventTime, fromState = startState, toState = nextState, host = host },
@@ -405,10 +405,10 @@ function sampleHostHistory(
 }
 
 function sampleTruncatedExponential(rate: Real, maxT: Real) => Real {
-  let uMin = exp(-rate * maxT);
+  val uMin = exp(-rate * maxT);
   // Assuming directly from the truncated distribution gave numerical errors
   assume u_ ~ Uniform(0.0, 1.0);
-  let u = uMin + u_ * (1. - uMin);
-  let expSample = -log(u) / rate;
+  val u = uMin + u_ * (1. - uMin);
+  val expSample = -log(u) / rate;
   return expSample;
 }

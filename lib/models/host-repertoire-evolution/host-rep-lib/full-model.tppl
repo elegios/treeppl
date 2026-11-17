@@ -18,21 +18,21 @@ function fullModelWeight(
 ) => Real {
   if nextIndex > nEvents {
    // Handle the fact that there was no event in the last time segment
-    let timePassed = currAge - finalAge;
-    let totalLeavingRate = getTotalRate(currRep, modelParams, nhosts);
+    val timePassed = currAge - finalAge;
+    val totalLeavingRate = getTotalRate(currRep, modelParams, nhosts);
     // The probability that no event occurs in the time interval is exp(-t * rate)
     return -timePassed * totalLeavingRate;
   } else {
-    let nextEvent = eventSeq[nextIndex];
-    let newAge = nextEvent.eventTime;
+    val nextEvent = eventSeq[nextIndex];
+    val newAge = nextEvent.eventTime;
     // Compute the total rate of leaving the current state
-    let totalLeavingRate = getTotalRate(currRep, modelParams, nhosts);
-    let thisRate = getRate(currRep, nextEvent, modelParams);
-    let timePassed = currAge - newAge;
+    val totalLeavingRate = getTotalRate(currRep, modelParams, nhosts);
+    val thisRate = getRate(currRep, nextEvent, modelParams);
+    val timePassed = currAge - newAge;
     // Compute the log density at this event
-    let thisWeight = log(thisRate / totalLeavingRate) - timePassed * totalLeavingRate;
+    val thisWeight = log(thisRate / totalLeavingRate) - timePassed * totalLeavingRate;
     // Compute the next repertoire 
-    let newRep = updateRepertoire(currRep, nextEvent, nhosts);
+    val newRep = updateRepertoire(currRep, nextEvent, nhosts);
     return thisWeight + fullModelWeight(
       nextIndex + 1,
       newRep,
@@ -51,9 +51,9 @@ function getTotalRate(
   currRep: Int[], modelParams: ModelParams, nhosts: Int
 ) => Real {
   // Compute the total rate of leaving the current repertoire
-  let gainRates = fold(
+  val gainRates = fold(
     function(acc: Real, i: Int) => Real {
-      let fromState = currRep[i];
+      val fromState = currRep[i];
       if fromState == 2 {
         // No gain events from 2
         return acc;
@@ -64,9 +64,9 @@ function getTotalRate(
     0.0,
     1 to nhosts
   );
-  let lossRates = fold(
+  val lossRates = fold(
     function(acc: Real, i: Int) => Real {
-      let fromState = currRep[i];
+      val fromState = currRep[i];
       if fromState == 0 {
         return acc;
       } else {
@@ -80,7 +80,7 @@ function getTotalRate(
 }
 
 function getRate(currRep: Int[], nextEvent: Event, modelParams: ModelParams) => Real {
-  let hostIndex = nextEvent.host;
+  val hostIndex = nextEvent.host;
   if nextEvent.fromState > nextEvent.toState {
     return getLossRate(currRep, hostIndex, modelParams);
   } else {
@@ -92,12 +92,12 @@ function getLossRate(
   repertoire: Int[], hostIndex: Int, modelParams: ModelParams
 ) => Real {
   // Check if we are losing a two and if this results in a legal repertoire
-  let fromState = repertoire[hostIndex];
+  val fromState = repertoire[hostIndex];
   if fromState == 2 && n2s(repertoire) == 1 {
     return 0.0;
   } else {
-    let toState = fromState - 1;
-    let baseRate = mtxGet(fromState + 1, toState + 1, modelParams.embeddedQMatrix.mat);
+    val toState = fromState - 1;
+    val baseRate = mtxGet(fromState + 1, toState + 1, modelParams.embeddedQMatrix.mat);
     return baseRate;
   }
 }
@@ -107,14 +107,14 @@ function getGainRate (
   hostIndex: Int,
   modelParams: ModelParams
 ) => Real {
-  let fromState = repertoire[hostIndex];
-  let toState = fromState + 1;
-  let baseRate = mtxGet(fromState + 1, toState + 1, modelParams.embeddedQMatrix.mat);
+  val fromState = repertoire[hostIndex];
+  val toState = fromState + 1;
+  val baseRate = mtxGet(fromState + 1, toState + 1, modelParams.embeddedQMatrix.mat);
   // We need to add the phylogenetic influence to the rate
   // since we have a gain event
   if fromState == 0 {
-    let currentHosts = whichTrue(sapply(repertoire, function (i: Int) => Bool {return i == 2 || i == 1; })); 
-    let dist = mtxMean(mtxRowCols(
+    val currentHosts = whichTrue(sapply(repertoire, function (i: Int) => Bool {return i == 2 || i == 1; })); 
+    val dist = mtxMean(mtxRowCols(
       modelParams.hostMetric, hostIndex, currentHosts
     ));
     // This is where the model departs from the original implementation
@@ -122,8 +122,8 @@ function getGainRate (
       (dist / modelParams.meanDist)^(-modelParams.beta)
     );
   } else {
-    let currentHosts = whichTrue(sapply(repertoire, function (i: Int) => Bool {return i == 2; }));   
-    let dist = mtxMean(mtxRowCols(
+    val currentHosts = whichTrue(sapply(repertoire, function (i: Int) => Bool {return i == 2; }));   
+    val dist = mtxMean(mtxRowCols(
       modelParams.hostMetric, hostIndex, currentHosts
     ));
     // This is where the model departs from the original implementation
@@ -142,16 +142,16 @@ function allTimesValidBranch(
     // We reached the end of the proposed history, the branch is valid!
     return true;
   } else {
-    let event = eventSeq[eventIndex];
+    val event = eventSeq[eventIndex];
     if event.fromState == 2 {
-      let n2s = fold(function(acc: Int, h: Int) => Int { if h == 2 { return acc + 1; } else { return acc; }}, 0, currRep);
+      val n2s = fold(function(acc: Int, h: Int) => Int { if h == 2 { return acc + 1; } else { return acc; }}, 0, currRep);
       if n2s == 1 {
         // We have a loss event on repertoire with a single true hosts, so it is invalid
         return false;
       }
     }
     // The repertoire is still valid, update it with the new event
-    let newRep = updateRepertoire(currRep, event, nhosts);
+    val newRep = updateRepertoire(currRep, event, nhosts);
     return allTimesValidBranch(
       newRep,
       eventSeq,

@@ -74,10 +74,10 @@ function logFactorial(n: Real) => Real {
 // TODO: Should PI be defined as global constant?
 function lnGamma(z: Real) => Real {
 
-    let pi = 3.14159265358979;
-    let lanczos_g = 7.0;
-    let lanczos_n = 9;
-    let lanczos_c = [
+    val pi = 3.14159265358979;
+    val lanczos_g = 7.0;
+    val lanczos_n = 9;
+    val lanczos_c = [
         0.99999999999980993,
         676.5203681218851,
        -1259.1392167224028,
@@ -102,14 +102,14 @@ function lnGamma(z: Real) => Real {
     }
 
     /* ---- Shift the argument (Lanczos works with z‑1) ------------------- */
-    let zz = z - 1.0;
-    let x  = lanczos_c[1];             /* c1 */
+    val zz = z - 1.0;
+    val x  = lanczos_c[1];             /* c1 */
 
     for i in 2 to lanczos_n {
-        let x = x + lanczos_c[i] / (zz + Real(i-1));
+        val x = x + lanczos_c[i] / (zz + Real(i-1));
     }
 
-    let t = zz + lanczos_g + 0.5;
+    val t = zz + lanczos_g + 0.5;
 
     /* Final lnGamma formula */
     return 0.5 * log(2.0 * pi) + (zz + 0.5) * log(t) - t + log(x);
